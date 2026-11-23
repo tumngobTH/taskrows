@@ -110,7 +110,7 @@ describe("store", () => {
     expect(store.getState().tasks[taskKey("a", "C1")].status).toBe("completed");
   });
 
-  it("setLists_merges_same_name_and_places_in_first_row", async () => {
+  it("setLists_merges_same_name_in_place_of_its_member", async () => {
     const { persist, store } = setup([acct("a"), acct("b", "#16a34a")]);
     store.getState().addRow();
     store.getState().setLists("a", [tl("a", "g1", "Groceries"), tl("a", "w", "Work")]);
@@ -120,7 +120,7 @@ describe("store", () => {
     const merged = s.groups.find((g) => g.key === mergedKey("Groceries"));
     expect(merged?.members).toEqual([listKey("a", "g1"), listKey("b", "g2")]);
     expect(s.groups.map((g) => g.key)).toEqual([mergedKey("Groceries"), listKey("a", "w")]);
-    expect(s.layout.rows[0].slots).toEqual([listKey("a", "w"), mergedKey("Groceries")]);
+    expect(s.layout.rows[0].slots).toEqual([mergedKey("Groceries"), listKey("a", "w")]); // takes a:g1's slot
     expect(s.layout.rows[1].slots).toEqual([]);
     expect(await persist.loadLayout()).toEqual(s.layout);
   });

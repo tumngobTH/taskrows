@@ -1,5 +1,5 @@
 import type { AccountId, Group, Layout, Row, SlotKey, TaskList } from "../types";
-import { listKey, mergedKey, normaliseName } from "../lib/ids";
+import { isMergedKey, listKey, mergedKey, normaliseName } from "../lib/ids";
 
 export function resolveGroups(lists: TaskList[], mergeSameName: boolean): Group[] {
   const byName = new Map<string, TaskList[]>();
@@ -41,11 +41,21 @@ export function emptyLayout(): Layout {
 
 export function reconcileLayout(layout: Layout, groups: Group[]): Layout {
   const valid = new Set<SlotKey>(groups.map((g) => g.key));
-  const rows: Row[] = layout.rows.length
-    ? layout.rows.map((r) => ({ ...r, slots: r.slots.filter((s) => valid.has(s)) }))
-    : [{ id: "r1", heightFraction: 1, slots: [] }];
-  const placed = new Set<SlotKey>(rows.flatMap((r) => r.slots));
-  const missing = groups.map((g) => g.key).filter((k) => !placed.has(k));
+  const base: Row[] = layout.rows.length ? layout.rows : [{ id: "r1", heightFraction: 1, slots: [] }];
+  const order = base.flatMap((r) => r.slots);
+  const vanished = new Set(order.filter((s) => !valid.has(s)));
+  // A slot replacing a vanished one (same-name lists merging or splitting) takes its place;
+  // genuinely new slots go to the end of the first row.
+  const inherit = new Map<SlotKey, SlotKey[]>();
+  const missing: SlotKey[] = [];
+  for (const g of groups) {
+    if (order.includes(g.key)) continue;
+    const anchors = isMergedKey(g.key) ? g.members : [mergedKey(g.title)];
+    const anchor = order.find((s) => vanished.has(s) && anchors.includes(s));
+    if (anchor) inherit.set(anchor, [...(inherit.get(anchor) ?? []), g.key]);
+    else missing.push(g.key);
+  }
+  const rows = base.map((r) => ({ ...r, slots: r.slots.flatMap((s) => (valid.has(s) ? [s] : (inherit.get(s) ?? []))) }));
   rows[0] = { ...rows[0], slots: [...rows[0].slots, ...missing] };
   const newTaskTarget: Record<SlotKey, AccountId> = {};
   for (const [k, v] of Object.entries(layout.newTaskTarget)) if (valid.has(k)) newTaskTarget[k] = v;

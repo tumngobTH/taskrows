@@ -72,6 +72,27 @@ describe("layout", () => {
     ]);
   });
 
+  it("reconcile_merge_and_split_keep_slots_in_their_row", () => {
+    const lists = [tl("a", "1", "Groceries"), tl("b", "2", "Groceries"), tl("a", "3", "Work"), tl("b", "4", "Home")];
+    const split: Layout = {
+      rows: [
+        { id: "r1", heightFraction: 0.5, slots: [listKey("a", "3")] },
+        { id: "r2", heightFraction: 0.5, slots: [listKey("b", "4"), listKey("a", "1"), listKey("b", "2")] },
+      ],
+      newTaskTarget: {},
+    };
+    const merged = reconcileLayout(split, resolveGroups(lists, true));
+    expect(merged.rows.map((r) => r.slots)).toEqual([
+      [listKey("a", "3")],
+      [listKey("b", "4"), mergedKey("Groceries")],
+    ]);
+    const back = reconcileLayout(merged, resolveGroups(lists, false));
+    expect(back.rows.map((r) => r.slots)).toEqual([
+      [listKey("a", "3")],
+      [listKey("b", "4"), listKey("a", "1"), listKey("b", "2")],
+    ]);
+  });
+
   it("addRow_renormalises_fractions", () => {
     const next = addRow(emptyLayout());
     expect(next.rows.map((r) => r.id)).toEqual(["r1", "r2"]);
