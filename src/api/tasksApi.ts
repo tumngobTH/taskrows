@@ -66,13 +66,13 @@ export class TasksApi {
   async listTasks(
     accountId: AccountId,
     listId: string,
-    opts: { updatedMin?: string; completedMin?: string; showDeleted?: boolean },
+    opts: { updatedMin?: string; completedMin?: string; showDeleted?: boolean; showCompleted?: boolean },
   ): Promise<Task[]> {
     const out: Task[] = [];
     let pageToken: string | undefined;
     do {
       const q = new URLSearchParams({
-        showCompleted: "true",
+        showCompleted: String(opts.showCompleted ?? true),
         showHidden: "true",
         maxResults: "100",
       });

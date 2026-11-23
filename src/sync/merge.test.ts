@@ -30,6 +30,12 @@ describe("merge", () => {
     expect(base[taskKey("a1", "t1")]).toBeDefined();
   });
 
+  it("upsert_tombstone_from_old_list_does_not_delete_moved_task", () => {
+    const base = upsertTasks({}, [mk({ id: "t1", listId: "L2" })]);
+    const next = upsertTasks(base, [mk({ id: "t1", listId: "L1", deleted: true })]);
+    expect(next[taskKey("a1", "t1")]?.listId).toBe("L2");
+  });
+
   it("upsert_moves_task_to_new_list", () => {
     const base = upsertTasks({}, [mk({ id: "t1", listId: "L1" })]);
     const next = upsertTasks(base, [mk({ id: "t1", listId: "L2" })]);

@@ -17,7 +17,7 @@ import { DEFAULT_SETTINGS } from "../types";
 import { listKey, parseListKey, taskKey } from "../lib/ids";
 import * as L from "../layout/layout";
 import { childrenOf, replaceListTasks, upsertTasks } from "../sync/merge";
-import type { TasksApi } from "../api/tasksApi";
+import { ApiError, type TasksApi } from "../api/tasksApi";
 import type { CacheSnapshot, Persistence } from "../layout/persistence";
 import { removeAccount as removeAccountSecrets } from "../lib/tauri";
 
@@ -142,6 +142,7 @@ export function createTaskStore(deps: { api: TasksApi; persist: Persistence; now
       },
 
       setLists(accountId, incoming) {
+        if (!get().accounts.some((a) => a.id === accountId)) return; // account removed mid-sync
         const lists: Record<ListKey, TaskList> = {};
         for (const [k, l] of Object.entries(get().lists)) if (l.accountId !== accountId) lists[k] = l;
         for (const l of incoming) lists[listKey(l.accountId, l.id)] = l;
@@ -152,6 +153,8 @@ export function createTaskStore(deps: { api: TasksApi; persist: Persistence; now
       },
 
       applyListTasks(key, incoming, full) {
+        const { accountId } = parseListKey(key);
+        if (!get().accounts.some((a) => a.id === accountId)) return; // account removed mid-sync
         set((s) => ({ tasks: full ? replaceListTasks(s.tasks, key, incoming) : upsertTasks(s.tasks, incoming) }));
       },
 
@@ -242,9 +245,29 @@ export function createTaskStore(deps: { api: TasksApi; persist: Persistence; now
         if (to.previousTaskId) opts.previous = to.previousTaskId;
         if (to.parentId) opts.parent = to.parentId;
         if (dest.listId !== task.listId) opts.destinationTasklist = dest.listId;
-        await optimistic(patched(task, { listId: dest.listId, parent: to.parentId ?? undefined }), async () => {
-          const r = await api.moveTask(task.accountId, task.listId, task.id, opts);
-          return (t) => upsertTasks(t, [r]);
+        // A parent moved to another list takes its subtasks (open and completed) with it.
+        const children = opts.destinationTasklist ? childrenOf(get().tasks, task) : [];
+        const changes = Object.assign(
+          patched(task, { listId: dest.listId, parent: to.parentId ?? undefined }),
+          ...children.map((c) => patched(c, { listId: dest.listId, parent: task.id })),
+        );
+        await optimistic(changes, async () => {
+          const results = [await api.moveTask(task.accountId, task.listId, task.id, opts)];
+          let previous: string | undefined;
+          for (const c of children) {
+            const childOpts: { previous?: string; parent?: string; destinationTasklist?: string } = {
+              destinationTasklist: dest.listId,
+              parent: task.id,
+            };
+            if (previous) childOpts.previous = previous;
+            try {
+              results.push(await api.moveTask(task.accountId, task.listId, c.id, childOpts));
+              previous = c.id;
+            } catch (e) {
+              if (!(e instanceof ApiError && e.status === 404)) throw e; // 404: already moved by Google
+            }
+          }
+          return (t) => upsertTasks(t, results);
         });
       },
 
@@ -286,6 +309,8 @@ export function createTaskStore(deps: { api: TasksApi; persist: Persistence; now
       },
 
       markReauth(accountId) {
+        const acc = get().accounts.find((a) => a.id === accountId);
+        if (acc && !acc.needsReauth) get().toast(`Google sign-in expired for ${acc.email} — open Settings to sign in again`);
         set({ accounts: get().accounts.map((a) => (a.id === accountId ? { ...a, needsReauth: true } : a)) });
         saveAccounts();
       },

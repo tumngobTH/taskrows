@@ -257,4 +257,66 @@ describe("store", () => {
     for (const fn of [api.insertTask, api.patchTask, api.deleteTask, api.moveTask]) expect(fn).not.toHaveBeenCalled();
     expect(store.getState().toasts.map((t) => t.text)).toEqual(Array(5).fill("Still syncing — try again in a moment"));
   });
+  it("setLists_and_applyListTasks_for_unknown_account_are_ignored", () => {
+    const { store } = setup([acct("a")]);
+    store.getState().setLists("ghost", [tl("ghost", "G1", "Ghost")]);
+    store.getState().applyListTasks(listKey("ghost", "G1"), [task("ghost", "G1", "g1")], true);
+    const s = store.getState();
+    expect(s.lists).toEqual({});
+    expect(s.tasks).toEqual({});
+    expect(s.layout.rows.flatMap((r) => r.slots)).toEqual([]);
+  });
+
+  it("markReauth_toasts_once_on_transition", () => {
+    const { store } = setup([acct("a")]);
+    store.getState().markReauth("a");
+    store.getState().markReauth("a");
+    expect(store.getState().toasts.map((t) => t.text)).toEqual([
+      "Google sign-in expired for a@x.com — open Settings to sign in again",
+    ]);
+  });
+
+  it("moveTask_cross_list_parent_takes_its_children", async () => {
+    const { api, store } = setup();
+    store.getState().setLists("a", [tl("a", "L1", "Inbox"), tl("a", "L2", "Work")]);
+    store.getState().applyListTasks(
+      listKey("a", "L1"),
+      [
+        task("a", "L1", "p"),
+        task("a", "L1", "c1", { parent: "p", position: "00000000000000000001" }),
+        task("a", "L1", "c2", { parent: "p", position: "00000000000000000002", status: "completed" }),
+        task("a", "L1", "other"),
+      ],
+      true,
+    );
+    api.moveTask.mockImplementation(async (_a, _l, id, opts) =>
+      task("a", opts.destinationTasklist ?? "L1", id, opts.parent ? { parent: opts.parent } : {}),
+    );
+
+    await store.getState().moveTask(taskKey("a", "p"), { listKey: listKey("a", "L2"), previousTaskId: null });
+    expect(api.moveTask.mock.calls.map((c) => [c[2], c[3]])).toEqual([
+      ["p", { destinationTasklist: "L2" }],
+      ["c1", { destinationTasklist: "L2", parent: "p" }],
+      ["c2", { destinationTasklist: "L2", parent: "p", previous: "c1" }],
+    ]);
+    const t = store.getState().tasks;
+    expect([t[taskKey("a", "c1")].listId, t[taskKey("a", "c2")].listId, t[taskKey("a", "other")].listId]).toEqual(["L2", "L2", "L1"]);
+    expect(t[taskKey("a", "c1")].parent).toBe("p");
+  });
+
+  it("moveTask_child_404_is_treated_as_already_moved", async () => {
+    const { api, store } = setup();
+    store.getState().setLists("a", [tl("a", "L1", "Inbox"), tl("a", "L2", "Work")]);
+    store.getState().applyListTasks(listKey("a", "L1"), [task("a", "L1", "p"), task("a", "L1", "c1", { parent: "p" })], true);
+    api.moveTask.mockImplementation(async (_a, _l, id, opts) => {
+      if (id === "c1") throw new ApiError(404, "notFound", "Not Found");
+      return task("a", opts.destinationTasklist ?? "L1", id);
+    });
+
+    await store.getState().moveTask(taskKey("a", "p"), { listKey: listKey("a", "L2"), previousTaskId: null });
+    expect(api.moveTask).toHaveBeenCalledTimes(2);
+    expect(store.getState().toasts).toEqual([]);
+    expect(store.getState().tasks[taskKey("a", "c1")]).toMatchObject({ listId: "L2", parent: "p" });
+    expect(store.getState().tasks[taskKey("a", "p")].listId).toBe("L2");
+  });
 });

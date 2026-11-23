@@ -72,6 +72,13 @@ describe("TasksApi", () => {
     expect(p.get("showDeleted")).toBe("true");
   });
 
+  it("listTasks_sends_showCompleted_false_when_requested", async () => {
+    const { fn, calls } = fakeFetch([{ status: 200, body: {} }]);
+    const api = new TasksApi(tokens(), fn);
+    await api.listTasks("a", "l", { showCompleted: false });
+    expect(new URL(calls[0].url).searchParams.get("showCompleted")).toBe("false");
+  });
+
   it("moveTask_uses_destinationTasklist_and_restamps_listId", async () => {
     const { fn, calls } = fakeFetch([{ status: 200, body: rawTask("t1") }]);
     const api = new TasksApi(tokens(), fn);

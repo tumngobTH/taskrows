@@ -10,8 +10,10 @@ export function upsertTasks(
   const next = { ...tasks };
   for (const t of incoming) {
     const k = taskKey(t.accountId, t.id);
-    if (t.deleted === true) delete next[k];
-    else next[k] = t;
+    if (t.deleted === true) {
+      // A tombstone from the old list after a cross-list move must not delete the task in its new list.
+      if (next[k]?.listId === t.listId) delete next[k];
+    } else next[k] = t;
   }
   return next;
 }
