@@ -22,6 +22,13 @@ async function applyWindow(s: Settings) {
   }
 }
 
+/** Pure helper: only act when the minimized state actually changes. */
+export function minimizeTransition(prev: boolean, now: boolean): "pause" | "resume" | null {
+  if (!prev && now) return "pause";
+  if (prev && !now) return "resume";
+  return null;
+}
+
 export async function bootstrap(): Promise<{ store: TaskStore; engine: SyncEngine }> {
   const persist = createTauriPersistence();
   const api = new TasksApi({ getToken: getAccessToken });
@@ -42,14 +49,20 @@ export async function bootstrap(): Promise<{ store: TaskStore; engine: SyncEngin
   window.addEventListener("focus", () => void engine.syncNow());
   try {
     const win = getCurrentWindow();
-    void win.onResized(async () => {
-      try {
-        if (await win.isMinimized()) engine.pause();
-        else engine.resume();
-      } catch {
-        /* ignore */
-      }
-    });
+    let wasMinimized = false;
+    win
+      .onResized(async () => {
+        try {
+          const now = await win.isMinimized();
+          const action = minimizeTransition(wasMinimized, now);
+          wasMinimized = now;
+          if (action === "pause") engine.pause();
+          else if (action === "resume") engine.resume();
+        } catch {
+          /* ignore */
+        }
+      })
+      .catch(() => {});
   } catch {
     /* not running inside Tauri */
   }

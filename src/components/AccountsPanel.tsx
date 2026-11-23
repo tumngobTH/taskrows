@@ -10,13 +10,18 @@ const MAX_ACCOUNTS = 3;
 export default function AccountsPanel({ store, engine }: { store: TaskStore; engine: SyncEngine }) {
   const accounts = useStore(store, (s) => s.accounts);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const run = async () => {
+    if (busy) return;
     setError(null);
+    setBusy(true);
     try {
       await addAccountFlow(store, engine);
     } catch (e) {
       setError(errorText(e));
+    } finally {
+      setBusy(false);
     }
   };
   const remove = (id: string, email: string) => {
@@ -29,11 +34,11 @@ export default function AccountsPanel({ store, engine }: { store: TaskStore; eng
         <div className="row" key={a.id}>
           <span className="dot" style={{ background: a.color }} />
           <span className="email">{a.email}</span>
-          {a.needsReauth && <button onClick={run}>Sign in again</button>}
-          <button onClick={() => remove(a.id, a.email)}>Remove</button>
+          {a.needsReauth && <button onClick={run} disabled={busy}>Sign in again</button>}
+          <button onClick={() => remove(a.id, a.email)} disabled={busy}>Remove</button>
         </div>
       ))}
-      <button onClick={run} disabled={accounts.length >= MAX_ACCOUNTS}>
+      <button onClick={run} disabled={busy || accounts.length >= MAX_ACCOUNTS}>
         Add account
       </button>
       {error && <p className="error">{error}</p>}
