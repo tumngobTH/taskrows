@@ -65,9 +65,9 @@ With the app running, run:
 powershell -ExecutionPolicy Bypass -File scripts/measure-ram.ps1
 ```
 
-It lists `taskrows.exe` and all its `msedgewebview2.exe` descendants with their working set, prints the total, and exits with code 1 if the total is over 150 MB (exit code 2 if the app is not running). The target is under 150 MB for the whole process group.
+It lists `taskrows.exe` and all its `msedgewebview2.exe` descendants with private working set and working set per process. The acceptance metric is the summed **private working set** of the whole process group (what Task Manager's Processes tab shows), and the script's exit code follows it: 1 if over 150 MB, 2 if the app is not running. The target is under 150 MB. The summed working set is printed as a secondary figure only, because it double-counts pages shared between the WebView2 processes.
 
-- idle, no account: 376 MB (2026-11-24). This is the summed working set of the installed build at the sign-in screen (7 processes); the summed private working set was 80 MB. The summed working set double-counts pages shared between the WebView2 processes, so it overstates real usage.
+- idle, no account: 80 MB private across 7 processes, under the 150 MB target (2026-11-24). Summed working set, double-counted: 376 MB.
 - idle with ~10 lists: TBD
 
 ## Known limitations

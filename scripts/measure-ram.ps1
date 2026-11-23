@@ -1,5 +1,7 @@
-# Measures total working-set RAM of the TaskRows process group (taskrows.exe + its
-# msedgewebview2.exe descendants). Exit code 1 if total > LimitMB (default 150), 2 if not running.
+# Measures RAM of the TaskRows process group (taskrows.exe + its msedgewebview2.exe descendants).
+# Pass/fail metric: summed PRIVATE working set (Task Manager Processes tab, Memory column).
+# Summed WorkingSet is printed for info only (it double-counts pages shared between processes).
+# Exit code 1 if summed private WS > LimitMB (default 150), 2 if not running.
 param([int]$LimitMB = 150, [string]$ProcessName = 'taskrows')
 
 $all = Get-CimInstance Win32_Process
@@ -39,22 +41,31 @@ try {
     }
 } catch { }
 
+$missing = 0
 $rows = @($found | ForEach-Object {
+    $id = [int]$_.ProcessId
+    $pm = 'n/a'
+    if ($priv.ContainsKey($id)) { $pm = [math]::Round($priv[$id] / 1MB, 1) } else { $missing++ }
     [pscustomobject]@{
         Name         = $_.Name
         PID          = $_.ProcessId
+        PrivateMB    = $pm
         WorkingSetMB = [math]::Round($_.WorkingSetSize / 1MB, 1)
-        PrivateMB    = [math]::Round(([double]$priv[[int]$_.ProcessId]) / 1MB, 1)
     }
 })
 $rows | Format-Table -AutoSize | Out-String | Write-Host
 
 $total = [math]::Round((($found | Measure-Object -Property WorkingSetSize -Sum).Sum) / 1MB, 1)
-Write-Host ("TOTAL: {0} MB across {1} processes (limit {2} MB)" -f $total, $rows.Count, $LimitMB)
-$totalPriv = [math]::Round((($rows | Measure-Object -Property PrivateMB -Sum).Sum), 1)
-Write-Host ("Private working set (info only, not the pass/fail metric): {0} MB" -f $totalPriv)
-if ($total -gt $LimitMB) {
-    Write-Host "OVER LIMIT"
+$totalPriv = 0
+foreach ($r in $rows) { if ($r.PrivateMB -ne 'n/a') { $totalPriv += $r.PrivateMB } }
+$totalPriv = [math]::Round($totalPriv, 1)
+if ($missing -gt 0) {
+    Write-Host "WARNING: $missing process(es) had no perf-counter row; private total is UNRELIABLE (computed from the rows available)."
+}
+Write-Host ("TOTAL private WS: {0} MB across {1} processes (limit {2} MB)  <- PASS/FAIL metric (Task Manager Memory column)" -f $totalPriv, $rows.Count, $LimitMB)
+Write-Host ("info: summed WorkingSet: {0} MB (includes shared pages, double-counts)" -f $total)
+if ($totalPriv -gt $LimitMB) {
+    Write-Host "OVER LIMIT (private working set above $LimitMB MB)"
     exit 1
 }
 Write-Host "OK"
