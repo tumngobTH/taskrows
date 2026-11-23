@@ -20,6 +20,9 @@ pub struct Identity {
 pub enum AuthError {
     #[error("invalid_grant")]
     InvalidGrant,
+    /// Network unreachable (connect failure / timeout / no response). The frontend shows "Offline".
+    #[error("offline")]
+    Offline,
     #[error("{0}")]
     Http(String),
     #[error("{0}")]
@@ -28,7 +31,11 @@ pub enum AuthError {
 
 impl From<reqwest::Error> for AuthError {
     fn from(e: reqwest::Error) -> Self {
-        AuthError::Http(e.to_string())
+        if e.is_connect() || e.is_timeout() || (e.is_request() && e.status().is_none()) {
+            AuthError::Offline
+        } else {
+            AuthError::Http(e.to_string())
+        }
     }
 }
 
@@ -126,6 +133,16 @@ mod tests {
             .await;
         let r = refresh(&reqwest::Client::new(), &format!("{}/token", server.uri()), ("id", "sec"), "rt").await;
         assert!(matches!(r, Err(AuthError::InvalidGrant)));
+    }
+
+    #[tokio::test]
+    async fn refresh_unreachable_server_is_offline() {
+        // Bind then drop to get a loopback port nothing listens on: connect is refused.
+        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let r = refresh(&reqwest::Client::new(), &format!("http://127.0.0.1:{port}/token"), ("id", "sec"), "rt").await;
+        let e = r.unwrap_err();
+        assert!(matches!(e, AuthError::Offline), "got {e:?}");
+        assert_eq!(e.to_string(), "offline");
     }
 
     #[tokio::test]
