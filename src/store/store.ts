@@ -83,21 +83,45 @@ export function createTaskStore(deps: { api: TasksApi; persist: Persistence; now
       saveLayout();
     };
 
-    /** Optimistic write: apply locally, await the server, merge its answer; on failure restore + toast. */
-    async function optimistic(apply: (t: Tasks) => Tasks, call: () => Promise<(t: Tasks) => Tasks>) {
-      const snapshot = get().tasks;
-      set({ tasks: apply(snapshot) });
+    /**
+     * Optimistic write. `changes` maps each touched key to its new value (undefined = remove).
+     * On failure only those keys are reverted, and only if nobody else changed them since,
+     * so concurrent writes and poll merges are kept.
+     */
+    async function optimistic(changes: Record<TaskKey, Task | undefined>, call: () => Promise<(t: Tasks) => Tasks>) {
+      const before = get().tasks;
+      const keys = Object.keys(changes);
+      const applied = { ...before };
+      for (const k of keys) {
+        if (changes[k] === undefined) delete applied[k];
+        else applied[k] = changes[k] as Task;
+      }
+      set({ tasks: applied });
       try {
         const merge = await call();
         set((s) => ({ tasks: merge(s.tasks) }));
       } catch (e) {
-        set({ tasks: snapshot });
+        set((s) => {
+          const t = { ...s.tasks };
+          for (const k of keys) {
+            if (t[k] !== applied[k]) continue; // changed by someone else since: keep theirs
+            if (before[k] === undefined) delete t[k];
+            else t[k] = before[k];
+          }
+          return { tasks: t };
+        });
         get().toast(errText(e));
       }
     }
 
-    const patchLocal = (key: TaskKey, patch: Partial<Task>) => (t: Tasks): Tasks =>
-      t[key] ? { ...t, [key]: { ...t[key], ...patch } } : t;
+    const patched = (task: Task, patch: Partial<Task>) => ({ [taskKey(task.accountId, task.id)]: { ...task, ...patch } });
+
+    /** Writes are disabled until the first sync completes. */
+    const canWrite = () => {
+      if (get().writesEnabled) return true;
+      get().toast("Still syncing — try again in a moment");
+      return false;
+    };
 
     return {
       accounts: [],
@@ -132,6 +156,7 @@ export function createTaskStore(deps: { api: TasksApi; persist: Persistence; now
 
       // ---- optimistic task writes ----
       async addTask(slotKey, title) {
+        if (!canWrite()) return;
         const group = get().groups.find((g) => g.key === slotKey);
         if (!group) return;
         const accountId = L.targetAccount(get().layout, group);
@@ -149,80 +174,74 @@ export function createTaskStore(deps: { api: TasksApi; persist: Persistence; now
           updated: new Date(now()).toISOString(),
           position: "",
         };
-        await optimistic(
-          (t) => ({ ...t, [tmpKey]: temp }),
-          async () => {
-            const created = await api.insertTask(accountId, listId, { title });
-            return (t) => {
-              const { [tmpKey]: _gone, ...rest } = t;
-              return upsertTasks(rest, [created]);
-            };
-          },
-        );
+        await optimistic({ [tmpKey]: temp }, async () => {
+          const created = await api.insertTask(accountId, listId, { title });
+          return (t) => {
+            const { [tmpKey]: _gone, ...rest } = t;
+            return upsertTasks(rest, [created]);
+          };
+        });
       },
 
       async toggleComplete(key) {
+        if (!canWrite()) return;
         const task = get().tasks[key];
         if (!task) return;
         if (task.status === "completed") {
-          await optimistic(
-            (t) => patchLocal(key, { status: "needsAction", completed: undefined })(t),
-            async () => {
-              const r = await api.patchTask(task.accountId, task.listId, task.id, { status: "needsAction", completed: null });
-              return (t) => upsertTasks(t, [r]);
-            },
-          );
+          await optimistic(patched(task, { status: "needsAction", completed: undefined }), async () => {
+            const r = await api.patchTask(task.accountId, task.listId, task.id, { status: "needsAction", completed: null });
+            return (t) => upsertTasks(t, [r]);
+          });
           return;
         }
         const targets = [task, ...childrenOf(get().tasks, task).filter((c) => c.status !== "completed")];
         const stamp = new Date(now()).toISOString();
-        await optimistic(
-          (t) => targets.reduce((acc, x) => patchLocal(taskKey(x.accountId, x.id), { status: "completed", completed: stamp })(acc), t),
-          async () => {
-            const results: Task[] = [];
-            for (const x of targets) results.push(await api.patchTask(x.accountId, x.listId, x.id, { status: "completed" }));
-            return (t) => upsertTasks(t, results);
-          },
-        );
+        const changes = Object.assign({}, ...targets.map((x) => patched(x, { status: "completed", completed: stamp })));
+        await optimistic(changes, async () => {
+          const results: Task[] = [];
+          for (const x of targets) results.push(await api.patchTask(x.accountId, x.listId, x.id, { status: "completed" }));
+          return (t) => upsertTasks(t, results);
+        });
       },
 
       async updateTask(key, patch) {
+        if (!canWrite()) return;
         const task = get().tasks[key];
         if (!task) return;
         const local: Partial<Task> = {};
         if (patch.title !== undefined) local.title = patch.title;
         if (patch.notes !== undefined) local.notes = patch.notes ?? undefined;
         if (patch.due !== undefined) local.due = patch.due ?? undefined;
-        await optimistic(patchLocal(key, local), async () => {
+        await optimistic(patched(task, local), async () => {
           const r = await api.patchTask(task.accountId, task.listId, task.id, patch);
           return (t) => upsertTasks(t, [r]);
         });
       },
 
       async deleteTask(key) {
+        if (!canWrite()) return;
         const task = get().tasks[key];
         if (!task) return;
-        await optimistic(
-          (t) => {
-            const { [key]: _gone, ...rest } = t;
-            return rest;
-          },
-          async () => {
-            await api.deleteTask(task.accountId, task.listId, task.id);
-            return (t) => t;
-          },
-        );
+        await optimistic({ [key]: undefined }, async () => {
+          await api.deleteTask(task.accountId, task.listId, task.id);
+          return (t) => t;
+        });
       },
 
       async moveTask(key, to) {
+        if (!canWrite()) return;
         const task = get().tasks[key];
         if (!task) return;
-        const dest = parseListKey(to.listKey).listId;
+        const dest = parseListKey(to.listKey);
+        if (dest.accountId !== task.accountId) {
+          get().toast("Can't move tasks between accounts");
+          return;
+        }
         const opts: { previous?: string; parent?: string; destinationTasklist?: string } = {};
         if (to.previousTaskId) opts.previous = to.previousTaskId;
         if (to.parentId) opts.parent = to.parentId;
-        if (dest !== task.listId) opts.destinationTasklist = dest;
-        await optimistic(patchLocal(key, { listId: dest, parent: to.parentId ?? undefined }), async () => {
+        if (dest.listId !== task.listId) opts.destinationTasklist = dest.listId;
+        await optimistic(patched(task, { listId: dest.listId, parent: to.parentId ?? undefined }), async () => {
           const r = await api.moveTask(task.accountId, task.listId, task.id, opts);
           return (t) => upsertTasks(t, [r]);
         });

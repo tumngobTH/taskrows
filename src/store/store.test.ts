@@ -42,6 +42,7 @@ function setup(accounts: Account[] = [acct("a")]) {
   const persist = createMemoryPersistence();
   const store = createTaskStore({ api: api as unknown as TasksApi, persist, now: () => Date.parse("2026-11-24T00:00:00Z") });
   store.getState().hydrate(null, null, null, accounts);
+  store.setState({ writesEnabled: true });
   return { api, persist, store };
 }
 
@@ -155,5 +156,105 @@ describe("store", () => {
     expect(tauri.removeAccount).toHaveBeenCalledWith("b");
     expect((await persist.loadAccounts()).map((a) => a.id)).toEqual(["a"]);
     expect(Object.keys((await persist.loadCache())?.tasks ?? {})).toEqual([taskKey("a", "t1")]);
+  });
+
+  it("failed_write_reverts_only_its_own_keys_after_overlapping_add", async () => {
+    const { api, store } = setup();
+    store.getState().setLists("a", [tl("a", "L1", "Inbox")]);
+    let resolveAdd!: (t: Task) => void;
+    let rejectToggle!: (e: Error) => void;
+    api.insertTask.mockReturnValue(new Promise<Task>((r) => (resolveAdd = r)));
+    api.patchTask.mockReturnValue(new Promise((_r, j) => (rejectToggle = j)));
+
+    const add = store.getState().addTask(listKey("a", "L1"), "Milk");
+    const tmpKey = Object.keys(store.getState().tasks)[0];
+    const toggle = store.getState().toggleComplete(tmpKey);
+    resolveAdd(task("a", "L1", "srv1", { title: "Milk" }));
+    await add;
+    rejectToggle(new Error("Nope"));
+    await toggle;
+
+    const keys = Object.keys(store.getState().tasks);
+    expect(keys).toEqual([taskKey("a", "srv1")]);
+    expect(keys.some((k) => k.includes("tmp:"))).toBe(false);
+    expect(store.getState().toasts.map((t) => t.text)).toEqual(["Nope"]);
+  });
+
+  it("poll_merge_during_failing_write_survives_revert", async () => {
+    const { api, store } = setup();
+    store.getState().setLists("a", [tl("a", "L1", "Inbox")]);
+    store.getState().applyListTasks(listKey("a", "L1"), [task("a", "L1", "t1"), task("a", "L1", "t2")], true);
+    let reject!: (e: Error) => void;
+    api.patchTask.mockReturnValue(new Promise((_r, j) => (reject = j)));
+
+    const p = store.getState().updateTask(taskKey("a", "t1"), { title: "Renamed" });
+    expect(store.getState().tasks[taskKey("a", "t1")].title).toBe("Renamed");
+    store.getState().applyListTasks(
+      listKey("a", "L1"),
+      [task("a", "L1", "t2", { title: "t2 from server" }), task("a", "L1", "t3")],
+      false,
+    );
+    reject(new Error("Offline"));
+    await p;
+
+    const t = store.getState().tasks;
+    expect(t[taskKey("a", "t1")].title).toBe("t1");
+    expect(t[taskKey("a", "t2")].title).toBe("t2 from server");
+    expect(t[taskKey("a", "t3")]).toBeDefined();
+  });
+
+  it("failed_delete_restores_the_task", async () => {
+    const { api, store } = setup();
+    store.getState().setLists("a", [tl("a", "L1", "Inbox")]);
+    store.getState().applyListTasks(listKey("a", "L1"), [task("a", "L1", "t1")], true);
+    api.deleteTask.mockRejectedValue(new Error("Nope"));
+    await store.getState().deleteTask(taskKey("a", "t1"));
+    expect(store.getState().tasks[taskKey("a", "t1")]).toBeDefined();
+  });
+
+  it("moveTask_cross_list_sends_destination_and_reorder_does_not", async () => {
+    const { api, store } = setup();
+    store.getState().setLists("a", [tl("a", "L1", "Inbox"), tl("a", "L2", "Work")]);
+    store.getState().applyListTasks(listKey("a", "L1"), [task("a", "L1", "t1"), task("a", "L1", "t0")], true);
+    api.moveTask.mockImplementation(async (_a, _l, id, opts) => task("a", opts.destinationTasklist ?? "L1", id));
+
+    await store.getState().moveTask(taskKey("a", "t1"), { listKey: listKey("a", "L2"), previousTaskId: null });
+    expect(api.moveTask).toHaveBeenLastCalledWith("a", "L1", "t1", { destinationTasklist: "L2" });
+    expect(store.getState().tasks[taskKey("a", "t1")].listId).toBe("L2");
+
+    await store.getState().moveTask(taskKey("a", "t0"), { listKey: listKey("a", "L1"), previousTaskId: "x9" });
+    expect(api.moveTask).toHaveBeenLastCalledWith("a", "L1", "t0", { previous: "x9" });
+  });
+
+  it("moveTask_rejects_cross_account_drop", async () => {
+    const { api, store } = setup([acct("a"), acct("b", "#16a34a")]);
+    store.getState().setLists("a", [tl("a", "L1", "Inbox")]);
+    store.getState().setLists("b", [tl("b", "M1", "Other")]);
+    store.getState().applyListTasks(listKey("a", "L1"), [task("a", "L1", "t1")], true);
+    const before = store.getState().tasks;
+
+    await store.getState().moveTask(taskKey("a", "t1"), { listKey: listKey("b", "M1"), previousTaskId: null });
+    expect(api.moveTask).not.toHaveBeenCalled();
+    expect(store.getState().tasks).toBe(before);
+    expect(store.getState().toasts.map((t) => t.text)).toEqual(["Can't move tasks between accounts"]);
+  });
+
+  it("writes_blocked_until_first_sync", async () => {
+    const { api, store } = setup();
+    store.getState().setLists("a", [tl("a", "L1", "Inbox")]);
+    store.getState().applyListTasks(listKey("a", "L1"), [task("a", "L1", "t1")], true);
+    store.setState({ writesEnabled: false });
+    const before = store.getState().tasks;
+    const k = taskKey("a", "t1");
+
+    await store.getState().addTask(listKey("a", "L1"), "Milk");
+    await store.getState().toggleComplete(k);
+    await store.getState().updateTask(k, { title: "x" });
+    await store.getState().deleteTask(k);
+    await store.getState().moveTask(k, { listKey: listKey("a", "L1"), previousTaskId: null });
+
+    expect(store.getState().tasks).toBe(before);
+    for (const fn of [api.insertTask, api.patchTask, api.deleteTask, api.moveTask]) expect(fn).not.toHaveBeenCalled();
+    expect(store.getState().toasts.map((t) => t.text)).toEqual(Array(5).fill("Still syncing — try again in a moment"));
   });
 });
