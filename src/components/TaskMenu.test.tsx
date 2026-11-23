@@ -7,7 +7,7 @@ import { ymdToDue } from "../lib/dates";
 import type { TasksApi } from "../api/tasksApi";
 
 const KEY = "a:t1";
-const setup = (writesEnabled = true) => {
+const setup = (writesEnabled = true, extra: { parent?: string } = {}) => {
   const store = createTaskStore({ api: {} as TasksApi, persist: createMemoryPersistence() });
   setAppStore(store);
   const updateTask = vi.fn(async () => {});
@@ -23,7 +23,7 @@ const setup = (writesEnabled = true) => {
       "a:l2": { accountId: "a", id: "l2", title: "Work", updated: "" },
       "b:l3": { accountId: "b", id: "l3", title: "Other acct", updated: "" },
     },
-    tasks: { [KEY]: { accountId: "a", listId: "l1", id: "t1", title: "T", status: "needsAction", updated: "", position: "1", due: ymdToDue("2026-11-01"), notes: "old" } },
+    tasks: { [KEY]: { accountId: "a", listId: "l1", id: "t1", title: "T", status: "needsAction", updated: "", position: "1", due: ymdToDue("2026-11-01"), notes: "old", ...extra } },
   });
   render(<TaskMenu taskKey={KEY} />);
   fireEvent.click(screen.getByRole("button", { name: "Task menu" }));
@@ -33,6 +33,16 @@ const setup = (writesEnabled = true) => {
 beforeEach(() => vi.restoreAllMocks());
 
 describe("TaskMenu", () => {
+  it("a subtask has no Move to list option (moving would change its parent)", () => {
+    setup(true, { parent: "p1" });
+    expect(screen.queryByRole("button", { name: "Move to list…" })).toBeNull();
+  });
+
+  it("a top-level task offers Move to list", () => {
+    setup();
+    expect(screen.getByRole("button", { name: "Move to list…" })).toBeInTheDocument();
+  });
+
   it("Clear due sends due: null", () => {
     const { updateTask } = setup();
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));

@@ -3,6 +3,7 @@ import type { SyncEngine } from "../sync/syncEngine";
 
 export default function Footer({ engine, onSettings }: { engine: SyncEngine; onSettings: () => void }) {
   const sync = useTaskStore((s) => s.sync);
+  const reauth = useTaskStore((s) => s.accounts.filter((a) => a.needsReauth).length);
   let text = "Synced";
   if (sync.phase === "offline") text = "Offline";
   else if (sync.phase === "syncing") text = "Syncing…";
@@ -11,6 +12,11 @@ export default function Footer({ engine, onSettings }: { engine: SyncEngine; onS
   return (
     <footer className="footer">
       <span className="sync-text">{text}</span>
+      {reauth > 0 && (
+        <button type="button" className="reauth" onClick={onSettings}>
+          {reauth === 1 ? "1 account needs sign-in" : `${reauth} accounts need sign-in`}
+        </button>
+      )}
       <button type="button" onClick={() => void engine.syncNow()}>
         Sync now
       </button>

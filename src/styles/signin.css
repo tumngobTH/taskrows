@@ -12,3 +12,6 @@
 .accounts .row button { background: var(--bg-elevated); color: var(--fg); }
 .toasts { position: fixed; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; z-index: 50; }
 .toast { background: var(--fg); color: var(--bg); padding: 8px 12px; border-radius: 6px; font-size: 13px; max-width: 320px; }
+.gate { flex: 1 1 auto; }
+.gate button.link, .gate button[type="button"] { background: none; color: var(--fg-muted); }
+.startup-error { padding: 16px; color: #dc2626; }

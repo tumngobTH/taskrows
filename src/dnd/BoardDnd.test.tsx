@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import type { DragEndEvent } from "@dnd-kit/core";
-import { handleDragEnd, type DndData } from "./BoardDnd";
+import { boardCollision, handleDragEnd, type DndData } from "./BoardDnd";
 import Board from "../components/Board";
 import { createTaskStore, setAppStore } from "../store/store";
 import { createMemoryPersistence } from "../layout/persistence";
@@ -144,3 +144,32 @@ describe("Board", () => {
   });
 });
 
+describe("boardCollision", () => {
+  const rect = (left: number, top: number) => ({ left, top, right: left + 100, bottom: top + 20, width: 100, height: 20 });
+  const container = (id: string, data: DndData, r: ReturnType<typeof rect>) => ({
+    id,
+    key: id,
+    data: { current: data },
+    disabled: false,
+    node: { current: null },
+    rect: { current: r },
+  });
+  const args = (pointer: { x: number; y: number } | null) => {
+    const c = container("task|a1:t2", task("a1:t2", "a1:l1"), rect(0, 0));
+    return {
+      active: { id: "task|a1:t1", data: { current: task("a1:t1", "a1:l1") }, rect: { current: { initial: null, translated: null } } },
+      collisionRect: rect(500, 500),
+      droppableRects: new Map([[c.id, c.rect.current]]),
+      droppableContainers: [c],
+      pointerCoordinates: pointer,
+    } as unknown as Parameters<typeof boardCollision>[0];
+  };
+
+  it("a pointer drop in empty space snaps back (no target)", () => {
+    expect(boardCollision(args({ x: 900, y: 900 }))).toEqual([]);
+  });
+
+  it("the keyboard path (no pointer) still finds the closest item", () => {
+    expect(boardCollision(args(null)).map((c) => c.id)).toEqual(["task|a1:t2"]);
+  });
+});

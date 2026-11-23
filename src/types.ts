@@ -57,7 +57,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   listWidth: 320,
   pollIntervalSec: 60,
-  showCompleted: false,
+  showCompleted: true,
   fontSize: "M",
   alwaysOnTop: false,
   launchAtLogin: false,

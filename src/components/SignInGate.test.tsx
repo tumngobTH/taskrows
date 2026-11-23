@@ -64,4 +64,16 @@ describe("SignInGate", () => {
     await waitFor(() => expect(store.getState().accounts).toHaveLength(1));
     expect(engine.start).toHaveBeenCalled();
   });
+  it("Change OAuth client… shows the client form again", async () => {
+    vi.mocked(tauri.getOauthClient).mockResolvedValue("client-id");
+    vi.mocked(tauri.setOauthClient).mockResolvedValue();
+    const { store, engine } = make();
+    render(<SignInGate store={store} engine={engine} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Change OAuth client…" }));
+    fireEvent.change(screen.getByLabelText("Client ID"), { target: { value: "fixed" } });
+    fireEvent.change(screen.getByLabelText("Client secret"), { target: { value: "sec2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByRole("button", { name: "Add Google account" })).toBeInTheDocument();
+    expect(tauri.setOauthClient).toHaveBeenCalledWith("fixed", "sec2");
+  });
 });

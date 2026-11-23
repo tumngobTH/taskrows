@@ -93,3 +93,4 @@ html[data-font="L"] { font-size: 16px; }
 .task.drag-overlay { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
 .row-resize { flex: none; height: 6px; margin: -3px 0; position: relative; z-index: 1; cursor: row-resize; touch-action: none; }
 .row-resize:hover, .row-resize:active { background: var(--accent); opacity: 0.5; }
+.footer .reauth { color: #dc2626; }

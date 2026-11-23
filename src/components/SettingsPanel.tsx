@@ -1,9 +1,53 @@
+import { useEffect, useState } from "react";
 import { useStore } from "zustand";
+import { getOauthClient } from "../lib/tauri";
 import { ACCOUNT_COLORS, type TaskStore } from "../store/store";
 import type { SyncEngine } from "../sync/syncEngine";
 import type { Settings } from "../types";
 import AccountsPanel from "./AccountsPanel";
 import NumberSetting from "./NumberSetting";
+import OAuthClientForm from "./OAuthClientForm";
+import { errorText } from "./addAccount";
+
+/** Shows the stored client ID (never the secret) and lets the user replace the client. */
+function OAuthClientSection() {
+  const [clientId, setClientId] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const load = async () => {
+    try {
+      setClientId((await getOauthClient()) ?? null);
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+  useEffect(() => {
+    void load();
+  }, []);
+  return (
+    <section>
+      <h3>OAuth client</h3>
+      <p className="setting">
+        Client ID: <code>{clientId ?? "not set"}</code>
+      </p>
+      {error && <p className="error">{error}</p>}
+      {editing ? (
+        <OAuthClientForm
+          className="setting oauth-form"
+          onSaved={async () => {
+            setEditing(false);
+            await load();
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      ) : (
+        <button type="button" onClick={() => setEditing(true)}>
+          Change
+        </button>
+      )}
+    </section>
+  );
+}
 
 function Radios<K extends keyof Settings>({
   legend,
@@ -71,6 +115,8 @@ export default function SettingsPanel({ store, engine, onClose }: { store: TaskS
           </div>
         ))}
       </section>
+
+      <OAuthClientSection />
 
       <section>
         <h3>Board</h3>

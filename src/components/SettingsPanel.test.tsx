@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import * as tauri from "../lib/tauri";
 import SettingsPanel from "./SettingsPanel";
 import { applySettings } from "../app/applySettings";
 import { createTaskStore } from "../store/store";
@@ -51,7 +52,22 @@ describe("SettingsPanel", () => {
     fireEvent.click(screen.getByLabelText("Large"));
     fireEvent.click(screen.getByLabelText("Dark"));
     const s = store.getState().settings;
-    expect([s.showCompleted, s.fontSize, s.theme]).toEqual([true, "L", "dark"]);
+    expect([s.showCompleted, s.fontSize, s.theme]).toEqual([false, "L", "dark"]); // Show completed defaults to on
+  });
+
+  it("shows the OAuth client ID read-only and Change reopens the client form", async () => {
+    vi.mocked(tauri.getOauthClient).mockResolvedValue("cid-123");
+    vi.mocked(tauri.setOauthClient).mockResolvedValue();
+    make();
+    expect(await screen.findByText("cid-123")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.change(screen.getByLabelText("Client ID"), { target: { value: "new-id" } });
+    fireEvent.change(screen.getByLabelText("Client secret"), { target: { value: "new-sec" } });
+    vi.mocked(tauri.getOauthClient).mockResolvedValue("new-id");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("new-id")).toBeInTheDocument();
+    expect(tauri.setOauthClient).toHaveBeenCalledWith("new-id", "new-sec");
+    expect(screen.queryByLabelText("Client secret")).toBeNull();
   });
 
   it("picking a colour updates the account", () => {

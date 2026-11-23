@@ -44,3 +44,5 @@
 .swatches .email { flex: 1; font-size: 0.85em; color: var(--fg-muted); overflow-wrap: anywhere; }
 .swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
 .swatch.on { border-color: var(--fg); }
+.settings-panel .oauth-form { flex-direction: column; align-items: stretch; }
+.settings-panel .oauth-form label { display: flex; flex-direction: column; gap: 2px; }

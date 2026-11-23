@@ -46,7 +46,7 @@ const RANK: Record<DndData["type"], number> = { slot: 0, task: 0, member: 1, row
  * tasks go to tasks / member lists / columns. A top-level task never targets a subtask slot
  * (that would nest it); a subtask sees every task so an out-of-parent drop is refused with a toast.
  */
-const collision: CollisionDetection = (args) => {
+export const boardCollision: CollisionDetection = (args) => {
   const active = args.active.data.current as DndData | undefined;
   if (!active) return [];
   const accepts = (d: DndData | undefined): boolean => {
@@ -75,6 +75,8 @@ const collision: CollisionDetection = (args) => {
     if (inside.length > 0) return closestCenter({ ...args, droppableContainers: inside });
     return [hit];
   }
+  // A pointer released over empty space snaps back; only the keyboard path (no pointer) uses distance.
+  if (args.pointerCoordinates) return [];
   return closestCenter({ ...args, droppableContainers: items(() => true) });
 };
 
@@ -183,7 +185,7 @@ export default function BoardDnd({ children }: { children: ReactNode }) {
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={collision}
+      collisionDetection={boardCollision}
       onDragStart={onDragStart}
       onDragEnd={(e) => {
         setActive(null);

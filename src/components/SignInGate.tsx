@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
-import { getOauthClient, setOauthClient } from "../lib/tauri";
+import { getOauthClient } from "../lib/tauri";
 import type { TaskStore } from "../store/store";
 import type { SyncEngine } from "../sync/syncEngine";
 import { addAccountFlow, errorText } from "./addAccount";
+import OAuthClientForm from "./OAuthClientForm";
 import "../styles/signin.css";
 
 interface Props {
@@ -14,8 +15,7 @@ interface Props {
 export default function SignInGate({ store, engine }: Props) {
   const accountCount = useStore(store, (s) => s.accounts.length);
   const [hasClient, setHasClient] = useState<boolean | null>(null);
-  const [clientId, setClientId] = useState("");
-  const [clientSecret, setClientSecret] = useState("");
+  const [editingClient, setEditingClient] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -34,37 +34,23 @@ export default function SignInGate({ store, engine }: Props) {
 
   if (hasClient === null) return null;
 
-  if (!hasClient) {
-    const save = async (e: React.FormEvent) => {
-      e.preventDefault();
-      setError(null);
-      setBusy(true);
-      try {
-        await setOauthClient(clientId.trim(), clientSecret.trim());
-        await check();
-      } catch (err) {
-        setError(errorText(err));
-      } finally {
-        setBusy(false);
-      }
-    };
+  if (!hasClient || editingClient) {
     return (
-      <form className="gate" onSubmit={save}>
-        <h1>Connect to Google</h1>
-        <label>
-          Client ID
-          <input value={clientId} onChange={(e) => setClientId(e.target.value)} autoComplete="off" />
-        </label>
-        <label>
-          Client secret
-          <input value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} type="password" autoComplete="off" />
-        </label>
-        <button type="submit" disabled={busy || !clientId.trim() || !clientSecret.trim()}>
-          Save
-        </button>
-        {error && <p className="error">{error}</p>}
-        <p>See docs/SETUP-GOOGLE.md for how to create these.</p>
-      </form>
+      <OAuthClientForm
+        className="gate"
+        heading={<h1>Connect to Google</h1>}
+        footer={
+          <>
+            {error && <p className="error">{error}</p>}
+            <p>See docs/SETUP-GOOGLE.md for how to create these.</p>
+          </>
+        }
+        onSaved={async () => {
+          setEditingClient(false);
+          await check();
+        }}
+        onCancel={hasClient ? () => setEditingClient(false) : undefined}
+      />
     );
   }
 
@@ -88,6 +74,9 @@ export default function SignInGate({ store, engine }: Props) {
         Add Google account
       </button>
       {error && <p className="error">{error}</p>}
+      <button type="button" className="link" onClick={() => setEditingClient(true)} disabled={busy}>
+        Change OAuth client…
+      </button>
     </div>
   );
 }

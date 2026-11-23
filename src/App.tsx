@@ -13,15 +13,10 @@ export default function App({ store, engine }: { store: TaskStore; engine: SyncE
   const [settingsOpen, setSettingsOpen] = useState(false);
   return (
     <div className="app">
-      {accountCount === 0 ? (
-        <SignInGate store={store} engine={engine} />
-      ) : (
-        <>
-          <Board />
-          {settingsOpen && <SettingsPanel store={store} engine={engine} onClose={() => setSettingsOpen(false)} />}
-          <Footer engine={engine} onSettings={() => setSettingsOpen((o) => !o)} />
-        </>
-      )}
+      {accountCount === 0 ? <SignInGate store={store} engine={engine} /> : <Board />}
+      {/* Settings stay reachable from the sign-in gate (e.g. to fix the OAuth client). */}
+      {settingsOpen && <SettingsPanel store={store} engine={engine} onClose={() => setSettingsOpen(false)} />}
+      <Footer engine={engine} onSettings={() => setSettingsOpen((o) => !o)} />
       <Toast store={store} />
     </div>
   );

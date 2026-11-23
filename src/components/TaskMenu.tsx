@@ -81,10 +81,14 @@ export default function TaskMenu({ taskKey }: { taskKey: TaskKey }) {
               Clear
             </button>
           </div>
-          <button type="button" disabled={!writes || targets.length === 0} onClick={() => setPanel(panel === "move" ? null : "move")}>
-            Move to list…
-          </button>
+          {/* A subtask can't change list without leaving its parent (spec non-goal). */}
+          {!task.parent && (
+            <button type="button" disabled={!writes || targets.length === 0} onClick={() => setPanel(panel === "move" ? null : "move")}>
+              Move to list…
+            </button>
+          )}
           {panel === "move" &&
+            !task.parent &&
             targets.map((l) => (
               <button
                 key={l.id}
