@@ -23,7 +23,7 @@ TaskRows talks to Google Tasks with **your own** Google Cloud OAuth client. You 
 6. **Create the OAuth client.** Open **Credentials → Create credentials → OAuth client ID**.
    - Application type: **Desktop app**.
    - Name: `TaskRows desktop`. Click **Create**.
-7. **Copy the Client ID and Client secret** from the dialog (you can reopen them later from **Credentials**).
+7. **Copy the Client ID and Client secret now.** The secret is shown in full only once, in the dialog that appears after **Create**: copy it immediately, or click **Download JSON** and keep that file. Google does not show it again later; if you lose it, create a new OAuth client (step 6) and use that one.
 8. **Paste them into TaskRows.** On its first screen, enter the Client ID and Client secret, click **Save**, then click **Add Google account** and finish sign-in in the browser tab that opens. The tab says "Signed in" when done; return to TaskRows.
 
 ## Signing in with up to three accounts
@@ -33,6 +33,10 @@ TaskRows shows lists from up to **three** Google accounts. Use the same OAuth cl
 ## Troubleshooting
 
 - **`no_client`** — No OAuth client is saved. Enter the Client ID and Client secret on the first screen (step 8).
+- **Typo in the Client ID or secret** — Click **Change OAuth client…** on the first screen (or **Settings → OAuth client → Change**) and enter them again. Accounts signed in with the old client may need to sign in again.
+- **`denied`** — You clicked **Cancel** (or did not allow access) on the Google page. Click **Add Google account** and allow access.
+- **`oauth_error`** — Google reported a sign-in error. Check the Client ID/secret and that the app is published (step 5), then try again.
+- **Offline** in the footer — TaskRows could not reach Google. Your cached lists stay visible; if TaskRows started offline, editing is enabled after the first successful sync.
 - **`timeout`** — The browser sign-in was not finished in time (or the browser did not open). Click **Add Google account** again and complete the Google page promptly.
 - **`state_mismatch`** — The sign-in response did not match the request (an older tab was used, or two sign-ins overlapped). Close old sign-in tabs and try once more.
 - **`no_refresh_token`** — Google did not return a long-lived token, usually because the app was previously authorised. Remove TaskRows at <https://myaccount.google.com/permissions>, then sign in again.
