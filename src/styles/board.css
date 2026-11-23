@@ -78,3 +78,14 @@ html[data-font="L"] { font-size: 16px; }
 }
 .footer .sync-text { flex: 1; }
 .footer button { font: inherit; }
+
+/* ---- drag and drop / row resize (Task 11) ---- */
+.list-header { cursor: grab; touch-action: none; }
+.list-header .icon-btn { cursor: pointer; }
+.task:not(.done):not([data-pending="true"]) { touch-action: none; }
+.list-column.dragging, .task.dragging { opacity: 0.4; }
+.drag-overlay { box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); cursor: grabbing; }
+.list-column.drag-overlay { height: auto; }
+.task.drag-overlay { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+.row-resize { flex: none; height: 6px; margin: -3px 0; position: relative; z-index: 1; cursor: row-resize; touch-action: none; }
+.row-resize:hover, .row-resize:active { background: var(--accent); opacity: 0.5; }
