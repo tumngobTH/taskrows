@@ -3,6 +3,7 @@ import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortabl
 import { useTaskStore } from "../store/store";
 import { RowIdContext, rowDndId, slotDndId, type DndData } from "../dnd/BoardDnd";
 import ListColumn from "./ListColumn";
+import RowMenu from "./RowMenu";
 import type { Row as RowT } from "../types";
 
 export default function Row({ row }: { row: RowT }) {
@@ -18,6 +19,9 @@ export default function Row({ row }: { row: RowT }) {
               const group = groups.find((g) => g.key === k);
               return group ? <ListColumn key={k} group={group} /> : null;
             })}
+            <div className="row-menu">
+              <RowMenu rowId={row.id} />
+            </div>
           </div>
         </SortableContext>
       </RowIdContext.Provider>

@@ -4,10 +4,13 @@ import { useTaskStore } from "../store/store";
 import { dueState, formatDue, todayYmd } from "../lib/dates";
 import { listKey, taskKey } from "../lib/ids";
 import { taskDndId, type DndData } from "../dnd/BoardDnd";
+import InlineTitle from "./InlineTitle";
+import TaskMenu from "./TaskMenu";
 import type { Task } from "../types";
 
 export default function TaskItem({ task, depth, dotColor }: { task: Task; depth: number; dotColor?: string }) {
   const toggleComplete = useTaskStore((s) => s.toggleComplete);
+  const updateTask = useTaskStore((s) => s.updateTask);
   const key = taskKey(task.accountId, task.id);
   const pending = task.id.startsWith("tmp:");
   const done = task.status === "completed";
@@ -50,12 +53,17 @@ export default function TaskItem({ task, depth, dotColor }: { task: Task; depth:
         onChange={() => void toggleComplete(key)}
       />
       {dotColor && <span className="dot" style={{ background: dotColor }} />}
-      <span className="title">{task.title}</span>
+      {pending || done ? (
+        <span className="title">{task.title}</span>
+      ) : (
+        <InlineTitle value={task.title} onSave={(t) => void updateTask(key, { title: t })} />
+      )}
       {task.due && !done && (
         <span className="due" data-due={dueState(task.due, today)}>
           {formatDue(task.due, today)}
         </span>
       )}
+      {!pending && <TaskMenu taskKey={key} />}
     </li>
   );
 }

@@ -48,6 +48,7 @@ export interface Actions {
   setRowHeights(fractions: number[]): void;
   setNewTaskTarget(slotKey: SlotKey, accountId: AccountId): void;
   updateSettings(patch: Partial<Settings>): void;
+  setAccountColor(accountId: AccountId, color: string): void;
   addAccountFromSignIn(info: { id: string; email: string }): void;
   markReauth(accountId: AccountId): void;
   removeAccount(accountId: AccountId): Promise<void>;
@@ -58,7 +59,7 @@ export interface Actions {
 
 export type TaskStore = StoreApi<State & Actions>;
 
-const COLORS = ["#2563eb", "#16a34a", "#d97706", "#dc2626", "#7c3aed", "#0891b2"];
+export const ACCOUNT_COLORS = ["#2563eb", "#16a34a", "#d97706", "#dc2626", "#7c3aed", "#0891b2"];
 const MAX_ACCOUNTS = 3;
 type Tasks = Record<TaskKey, Task>;
 
@@ -273,9 +274,14 @@ export function createTaskStore(deps: { api: TasksApi; persist: Persistence; now
         } else {
           if (accounts.length >= MAX_ACCOUNTS) return;
           const used = new Set(accounts.map((a) => a.color));
-          const color = COLORS.find((c) => !used.has(c)) ?? COLORS[0];
+          const color = ACCOUNT_COLORS.find((c) => !used.has(c)) ?? ACCOUNT_COLORS[0];
           set({ accounts: [...accounts, { id: info.id, email: info.email, color, needsReauth: false }] });
         }
+        saveAccounts();
+      },
+
+      setAccountColor(accountId, color) {
+        set({ accounts: get().accounts.map((a) => (a.id === accountId ? { ...a, color } : a)) });
         saveAccounts();
       },
 

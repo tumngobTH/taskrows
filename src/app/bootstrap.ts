@@ -4,19 +4,19 @@ import { createTauriPersistence } from "../layout/persistence";
 import { getAccessToken } from "../lib/tauri";
 import { createTaskStore, setAppStore, type TaskStore } from "../store/store";
 import { SyncEngine } from "../sync/syncEngine";
+import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { Settings } from "../types";
+import { applySettings } from "./applySettings";
 
-function applySettings(s: Settings) {
-  const root = document.documentElement;
-  if (s.theme === "system") delete root.dataset.theme;
-  else root.dataset.theme = s.theme;
-  root.dataset.font = s.fontSize;
-  root.style.setProperty("--list-width", `${s.listWidth}px`);
-}
 
 async function applyWindow(s: Settings) {
   try {
     await getCurrentWindow().setAlwaysOnTop(s.alwaysOnTop);
+  } catch {
+    /* not running inside Tauri */
+  }
+  try {
+    if ((await isEnabled()) !== s.launchAtLogin) await (s.launchAtLogin ? enable() : disable());
   } catch {
     /* not running inside Tauri */
   }

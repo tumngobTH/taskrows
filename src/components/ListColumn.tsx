@@ -8,6 +8,7 @@ import { isMergedKey, parseListKey, taskKey } from "../lib/ids";
 import { RowIdContext, columnDndId, memberDndId, slotDndId, taskDndId, type DndData } from "../dnd/BoardDnd";
 import AddTaskInput from "./AddTaskInput";
 import CompletedSection from "./CompletedSection";
+import ListMenu from "./ListMenu";
 import TaskItem from "./TaskItem";
 import type { Group, ListKey, Task } from "../types";
 
@@ -64,7 +65,7 @@ export default function ListColumn({ group }: { group: Group }) {
         {headerAccounts.map((id) => (
           <span key={id} className="dot" style={{ background: colorOf(id) }} />
         ))}
-        <button type="button" className="icon-btn" aria-label="List menu">⋯</button>
+        <ListMenu group={group} />
       </header>
       <div className="list-body" ref={setBodyRef}>
         <AddTaskInput slotKey={group.key} />
