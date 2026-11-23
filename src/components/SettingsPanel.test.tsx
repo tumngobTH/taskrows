@@ -29,13 +29,17 @@ beforeEach(() => document.documentElement.removeAttribute("style"));
 describe("SettingsPanel", () => {
   it("clamps a poll interval of 5 up to 15", () => {
     const { store } = make();
-    fireEvent.change(screen.getByLabelText("Poll interval (seconds)"), { target: { value: "5" } });
+    const f = screen.getByLabelText("Poll interval (seconds)");
+    fireEvent.change(f, { target: { value: "5" } });
+    fireEvent.blur(f);
     expect(store.getState().settings.pollIntervalSec).toBe(15);
   });
 
   it("list width 400 is stored and applied as --list-width", () => {
     const { store } = make();
-    fireEvent.change(screen.getByLabelText("List width (px)"), { target: { value: "400" } });
+    const f = screen.getByLabelText("List width (px)");
+    fireEvent.change(f, { target: { value: "400" } });
+    fireEvent.blur(f);
     expect(store.getState().settings.listWidth).toBe(400);
     applySettings(store.getState().settings);
     expect(document.documentElement.style.getPropertyValue("--list-width")).toBe("400px");

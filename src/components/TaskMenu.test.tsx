@@ -23,7 +23,7 @@ const setup = (writesEnabled = true) => {
       "a:l2": { accountId: "a", id: "l2", title: "Work", updated: "" },
       "b:l3": { accountId: "b", id: "l3", title: "Other acct", updated: "" },
     },
-    tasks: { [KEY]: { accountId: "a", listId: "l1", id: "t1", title: "T", status: "needsAction", updated: "", position: "1", due: ymdToDue("2026-12-01"), notes: "old" } },
+    tasks: { [KEY]: { accountId: "a", listId: "l1", id: "t1", title: "T", status: "needsAction", updated: "", position: "1", due: ymdToDue("2026-11-01"), notes: "old" } },
   });
   render(<TaskMenu taskKey={KEY} />);
   fireEvent.click(screen.getByRole("button", { name: "Task menu" }));
@@ -39,10 +39,39 @@ describe("TaskMenu", () => {
     expect(updateTask).toHaveBeenCalledWith(KEY, { due: null });
   });
 
-  it("changing the date sends the due timestamp", () => {
+  it("a complete date saves once (change then blur) and keeps the menu open", () => {
     const { updateTask } = setup();
-    fireEvent.change(screen.getByLabelText("Due date"), { target: { value: "2026-12-25" } });
-    expect(updateTask).toHaveBeenCalledWith(KEY, { due: ymdToDue("2026-12-25") });
+    const f = screen.getByLabelText("Due date");
+    fireEvent.change(f, { target: { value: "2026-12-01" } });
+    fireEvent.blur(f);
+    expect(updateTask).toHaveBeenCalledTimes(1);
+    expect(updateTask).toHaveBeenCalledWith(KEY, { due: "2026-12-01T00:00:00.000Z" });
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("an implausible year is never saved", () => {
+    const { updateTask } = setup();
+    const f = screen.getByLabelText("Due date");
+    fireEvent.change(f, { target: { value: "0002-12-01" } });
+    fireEvent.blur(f);
+    expect(updateTask).not.toHaveBeenCalled();
+  });
+
+  it("a note typed then Escape is flushed, not lost", () => {
+    const { updateTask } = setup();
+    fireEvent.click(screen.getByRole("button", { name: "Edit notes" }));
+    fireEvent.change(screen.getByLabelText("Notes"), { target: { value: "hello" } });
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(updateTask).toHaveBeenCalledWith(KEY, { notes: "hello" });
+  });
+
+  it("a note typed then an outside click is flushed once", () => {
+    const { updateTask } = setup();
+    fireEvent.click(screen.getByRole("button", { name: "Edit notes" }));
+    fireEvent.change(screen.getByLabelText("Notes"), { target: { value: "hi" } });
+    fireEvent.mouseDown(document.body);
+    expect(updateTask).toHaveBeenCalledTimes(1);
+    expect(updateTask).toHaveBeenCalledWith(KEY, { notes: "hi" });
   });
 
   it("Delete asks for confirmation first", () => {

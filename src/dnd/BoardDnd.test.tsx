@@ -130,7 +130,12 @@ describe("Board", () => {
   });
 
   it("Space on a column's menu button is not swallowed by the header drag handle", () => {
-    setup();
+    const { store } = setup();
+    // The list menu only exists on merged columns: give a2 a second "Work" list.
+    store.getState().setLists("a2", [
+      { accountId: "a2", id: "l3", title: "Other", updated: "" },
+      { accountId: "a2", id: "l9", title: "Work", updated: "" },
+    ]);
     render(<Board />);
     const menu = screen.getAllByRole("button", { name: "List menu" })[0];
     menu.focus();

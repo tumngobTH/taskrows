@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 
-/** Number field that commits a clamped value on every valid edit and normalises its text on blur. */
+/**
+ * Number field. The text stays local while editing; a clamped value is committed on blur / Enter,
+ * or immediately when an edit (e.g. a spinner step) is already within [min, max].
+ */
 export default function NumberSetting({
   label,
   value,
@@ -15,8 +18,18 @@ export default function NumberSetting({
   onCommit: (n: number) => void;
 }) {
   const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (!editing) setDraft(String(value));
+  }, [value, editing]);
   const clamp = (n: number) => Math.min(max ?? Infinity, Math.max(min, Math.round(n)));
+  const finish = () => {
+    const n = Number(draft);
+    const v = draft.trim() !== "" && Number.isFinite(n) ? clamp(n) : value;
+    setEditing(false);
+    setDraft(String(v));
+    if (v !== value) onCommit(v);
+  };
   return (
     <label className="setting">
       <span>{label}</span>
@@ -27,10 +40,14 @@ export default function NumberSetting({
         value={draft}
         onChange={(e) => {
           setDraft(e.target.value);
+          setEditing(true);
           const n = e.target.valueAsNumber;
-          if (Number.isFinite(n)) onCommit(clamp(n));
+          if (Number.isFinite(n) && n >= min && n <= (max ?? Infinity) && Number.isInteger(n)) onCommit(n);
         }}
-        onBlur={() => setDraft(String(value))}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") finish();
+        }}
+        onBlur={finish}
       />
     </label>
   );

@@ -10,28 +10,38 @@ export default function PopoverMenu({
   ariaLabel,
   glyph = "⋯",
   className = "icon-btn",
+  onClose,
   children,
 }: {
   ariaLabel: string;
   glyph?: string;
   className?: string;
+  onClose?: () => void;
   children: (close: () => void) => ReactNode;
 }) {
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const open = pos !== null;
-  const close = () => setPos(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  // Every way of closing goes through here so the owner can flush unsaved edits first.
+  const close = () => {
+    onCloseRef.current?.();
+    setPos(null);
+  };
+  const closeRef = useRef(close);
+  closeRef.current = close;
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPos(null);
+      if (e.key === "Escape") closeRef.current();
     };
     const onDown = (e: MouseEvent) => {
       const t = e.target as Node;
       if (menuRef.current?.contains(t) || btnRef.current?.contains(t)) return;
-      setPos(null);
+      closeRef.current();
     };
     document.addEventListener("keydown", onKey);
     document.addEventListener("mousedown", onDown);
@@ -63,7 +73,13 @@ export default function PopoverMenu({
       </button>
       {open &&
         createPortal(
-          <div ref={menuRef} role="dialog" aria-label={ariaLabel} className="popover-menu" style={{ top: pos.top, right: pos.right }}>
+          <div ref={menuRef} role="dialog" aria-label={ariaLabel} className="popover-menu" style={{ top: pos.top, right: pos.right }}
+            // Portalled React events still bubble to the drag activators of the owner; keep them out.
+            onPointerDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === " " || e.key === "Enter") e.stopPropagation();
+            }}
+          >
             {children(close)}
           </div>,
           document.body,

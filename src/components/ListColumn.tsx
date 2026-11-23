@@ -65,7 +65,7 @@ export default function ListColumn({ group }: { group: Group }) {
         {headerAccounts.map((id) => (
           <span key={id} className="dot" style={{ background: colorOf(id) }} />
         ))}
-        <ListMenu group={group} />
+        {merged && <ListMenu group={group} />}
       </header>
       <div className="list-body" ref={setBodyRef}>
         <AddTaskInput slotKey={group.key} />
