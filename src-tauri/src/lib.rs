@@ -1,3 +1,7 @@
+mod auth;
+mod files;
+mod secrets;
+
 use tauri_plugin_autostart::MacosLauncher;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
