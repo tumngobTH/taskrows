@@ -1,6 +1,3 @@
-// Task 3 wires these into Tauri commands.
-#![allow(dead_code)]
-
 use std::fs;
 use std::io;
 use std::path::Path;

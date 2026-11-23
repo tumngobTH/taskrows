@@ -1,6 +1,3 @@
-// Task 3 wires these into the OAuth flow.
-#![allow(dead_code)]
-
 use keyring::{Entry, Error};
 
 const SERVICE: &str = "taskrows";
