@@ -128,4 +128,14 @@ describe("Board", () => {
     expect(f1).toBeCloseTo(0.6);
     expect(f2).toBeCloseTo(0.4);
   });
+
+  it("Space on a column's menu button is not swallowed by the header drag handle", () => {
+    setup();
+    render(<Board />);
+    const menu = screen.getAllByRole("button", { name: "List menu" })[0];
+    menu.focus();
+    expect(fireEvent.keyDown(menu, { key: " ", code: "Space" })).toBe(true);
+    expect(menu.closest("header")).not.toHaveAttribute("aria-pressed", "true");
+  });
 });
+

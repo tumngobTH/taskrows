@@ -82,7 +82,11 @@ html[data-font="L"] { font-size: 16px; }
 /* ---- drag and drop / row resize (Task 11) ---- */
 .list-header { cursor: grab; touch-action: none; }
 .list-header .icon-btn { cursor: pointer; }
-.task:not(.done):not([data-pending="true"]) { touch-action: none; }
+.task .grip {
+  flex: none; width: 12px; margin-top: 1px; color: var(--fg-muted); cursor: grab; touch-action: none;
+  font-size: 0.8em; letter-spacing: -2px; opacity: 0; user-select: none;
+}
+.task:hover .grip:not(.off), .task .grip:focus-visible { opacity: 1; }
 .list-column.dragging, .task.dragging { opacity: 0.4; }
 .drag-overlay { box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); cursor: grabbing; }
 .list-column.drag-overlay { height: auto; }

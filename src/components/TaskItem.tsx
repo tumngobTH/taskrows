@@ -20,7 +20,7 @@ export default function TaskItem({ task, depth, dotColor }: { task: Task; depth:
     listKey: listKey(task.accountId, task.listId),
     parentId: depth > 0 ? (task.parent ?? null) : null,
   };
-  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
+  const { setNodeRef, setActivatorNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: taskDndId(key),
     data,
     disabled: dragOff,
@@ -28,13 +28,20 @@ export default function TaskItem({ task, depth, dotColor }: { task: Task; depth:
   return (
     <li
       ref={setNodeRef}
-      {...(dragOff ? {} : { ...attributes, ...listeners })}
       className={`task${done ? " done" : ""}${isDragging ? " dragging" : ""}`}
       data-task-key={key}
       data-depth={depth}
       data-pending={pending ? "true" : undefined}
       style={{ "--depth": depth, transform: CSS.Translate.toString(transform), transition } as React.CSSProperties}
     >
+      {/* Dedicated drag handle: keeps Space/Enter on the checkbox a native toggle, not a keyboard drag. */}
+      {dragOff ? (
+        <span className="grip off" aria-hidden="true" />
+      ) : (
+        <span className="grip" ref={setActivatorNodeRef} {...attributes} {...listeners} aria-label="Drag task">
+          ⋮⋮
+        </span>
+      )}
       <input
         type="checkbox"
         checked={done}

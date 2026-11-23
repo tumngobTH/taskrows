@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import BoardDnd from "../dnd/BoardDnd";
 import TaskItem from "./TaskItem";
 import { createTaskStore, setAppStore } from "../store/store";
 import { createMemoryPersistence } from "../layout/persistence";
@@ -30,5 +31,25 @@ describe("TaskItem", () => {
     setup();
     render(<ul><TaskItem task={{ ...base, id: "tmp:x" }} depth={0} /></ul>);
     expect(screen.getByRole("checkbox", { name: "Buy milk" })).toBeDisabled();
+  });
+
+  it("Space on the checkbox toggles it and does not start a keyboard drag", () => {
+    const store = createTaskStore({ api: {} as TasksApi, persist: createMemoryPersistence() });
+    setAppStore(store);
+    const toggleComplete = vi.fn(async () => {});
+    store.setState({ toggleComplete });
+    render(
+      <BoardDnd>
+        <ul><TaskItem task={base} depth={0} /></ul>
+      </BoardDnd>,
+    );
+    const box = screen.getByRole("checkbox", { name: "Buy milk" });
+    box.focus();
+    // fireEvent returns false when a handler called preventDefault (which would cancel the native toggle).
+    expect(fireEvent.keyDown(box, { key: " ", code: "Space" })).toBe(true);
+    fireEvent.click(box);
+    expect(toggleComplete).toHaveBeenCalledWith("a1:t1");
+    expect(screen.getByRole("button", { name: "Drag task" })).not.toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("listitem")).not.toHaveAttribute("role", "button");
   });
 });
