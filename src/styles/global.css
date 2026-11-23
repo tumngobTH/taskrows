@@ -1,0 +1,46 @@
+:root {
+  --bg: #ffffff;
+  --bg-elevated: #f3f4f6;
+  --fg: #1f2328;
+  --fg-muted: #656d76;
+  --border: #d0d7de;
+  --accent: #1a73e8;
+  font-family: "Segoe UI", "Leelawadee UI", system-ui, sans-serif;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1d21;
+    --bg-elevated: #26292e;
+    --fg: #e6e8eb;
+    --fg-muted: #9aa0a6;
+    --border: #3c4043;
+    --accent: #8ab4f8;
+  }
+}
+
+[data-theme="dark"] {
+  --bg: #1b1d21;
+  --bg-elevated: #26292e;
+  --fg: #e6e8eb;
+  --fg-muted: #9aa0a6;
+  --border: #3c4043;
+  --accent: #8ab4f8;
+}
+
+[data-theme="light"] {
+  --bg: #ffffff;
+  --bg-elevated: #f3f4f6;
+  --fg: #1f2328;
+  --fg-muted: #656d76;
+  --border: #d0d7de;
+  --accent: #1a73e8;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
