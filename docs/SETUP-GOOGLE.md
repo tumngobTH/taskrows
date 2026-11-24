@@ -17,14 +17,20 @@ TaskRows talks to Google Tasks with **your own** Google Cloud OAuth client. You 
    - `https://www.googleapis.com/auth/tasks`
 
    Save.
-5. **Publish the app.** Under **Audience** (or **OAuth consent screen**), click **Publish app** and confirm. The status must read **In production**.
+5. **Fill in Branding.** Google refuses to publish until the **Branding** page has all four of these; fill them before clicking Publish:
+   - **App name**: `TaskRows`.
+   - **User support email**: your own email.
+   - **App home page**: a public web page for the app, for example the GitHub repository page `https://github.com/<you>/taskrows`.
+   - **Privacy policy link**: a public page with the app's privacy policy. The repository ships one at `PRIVACY.md`; once the repo is on GitHub, use `https://github.com/<you>/taskrows/blob/develop/PRIVACY.md`. Any domain you own works too, as long as the page is reachable.
+   - If Google asks for **Authorized domains**, add the domain of those two URLs (for GitHub, `github.com`). Save.
+6. **Publish the app.** Under **Audience** (or **OAuth consent screen**), click **Publish app** and confirm. The status must read **In production**.
    - Why this matters: while the status is **Testing**, Google expires refresh tokens after **7 days**, so you would have to sign in again every week. In production the tokens last until you revoke them.
    - You do not need Google verification for personal use. On first sign-in Google shows an **unverified app** warning. This is expected: click **Advanced → Go to TaskRows (unsafe)**, then allow access.
-6. **Create the OAuth client.** Open **Credentials → Create credentials → OAuth client ID**.
+7. **Create the OAuth client.** Open **Credentials → Create credentials → OAuth client ID**.
    - Application type: **Desktop app**.
    - Name: `TaskRows desktop`. Click **Create**.
-7. **Copy the Client ID and Client secret now.** The secret is shown in full only once, in the dialog that appears after **Create**: copy it immediately, or click **Download JSON** and keep that file. Google does not show it again later; if you lose it, create a new OAuth client (step 6) and use that one.
-8. **Paste them into TaskRows.** On its first screen, enter the Client ID and Client secret, click **Save**, then click **Add Google account** and finish sign-in in the browser tab that opens. The tab says "Signed in" when done; return to TaskRows.
+8. **Copy the Client ID and Client secret now.** The secret is shown in full only once, in the dialog that appears after **Create**: copy it immediately, or click **Download JSON** and keep that file. Google does not show it again later; if you lose it, create a new OAuth client (step 7) and use that one.
+9. **Paste them into TaskRows.** On its first screen, enter the Client ID and Client secret, click **Save**, then click **Add Google account** and finish sign-in in the browser tab that opens. The tab says "Signed in" when done; return to TaskRows.
 
 ## Signing in with up to three accounts
 
@@ -32,10 +38,11 @@ TaskRows shows lists from up to **three** Google accounts. Use the same OAuth cl
 
 ## Troubleshooting
 
-- **`no_client`** — No OAuth client is saved. Enter the Client ID and Client secret on the first screen (step 8).
+- **"Valid app name, support email, homepage url, and privacy policy url are required for switching the app to external production mode"** — the Branding page is incomplete. Fill all four fields (step 5), save, then click **Publish app** again.
+- **`no_client`** — No OAuth client is saved. Enter the Client ID and Client secret on the first screen (step 9).
 - **Typo in the Client ID or secret** — Click **Change OAuth client…** on the first screen (or **Settings → OAuth client → Change**) and enter them again. Accounts signed in with the old client may need to sign in again.
 - **`denied`** — You clicked **Cancel** (or did not allow access) on the Google page. Click **Add Google account** and allow access.
-- **`oauth_error`** — Google reported a sign-in error. Check the Client ID/secret and that the app is published (step 5), then try again.
+- **`oauth_error`** — Google reported a sign-in error. Check the Client ID/secret and that the app is published (step 6), then try again.
 - **Offline** in the footer — TaskRows could not reach Google. Your cached lists stay visible; if TaskRows started offline, editing is enabled after the first successful sync.
 - **`timeout`** — The browser sign-in was not finished in time (or the browser did not open). Click **Add Google account** again and complete the Google page promptly.
 - **`state_mismatch`** — The sign-in response did not match the request (an older tab was used, or two sign-ins overlapped). Close old sign-in tabs and try once more.
