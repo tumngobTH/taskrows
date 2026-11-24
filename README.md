@@ -32,7 +32,7 @@ The installer is not code-signed, so Windows SmartScreen may show "Windows prote
 
 ## Where data lives
 
-Files are in `%APPDATA%\taskrows\`:
+Files are in `%APPDATA%\com.kim.taskrows\`:
 
 - `settings.json`
 - `layout.json`

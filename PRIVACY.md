@@ -27,7 +27,7 @@ TaskRows does not access contacts, calendar, Drive, Gmail, location, or any othe
 
 ## 4. Where the information is stored
 
-- **Task cache:** `%APPDATA%\taskrows\cache.json`, so the app starts instantly and works offline. Account labels in `%APPDATA%\taskrows\accounts.json`.
+- **Task cache:** `%APPDATA%\com.kim.taskrows\cache.json`, so the app starts instantly and works offline. Account labels in `%APPDATA%\com.kim.taskrows\accounts.json`.
 - **Credentials:** OAuth refresh tokens and the OAuth client ID/secret you entered are stored in Windows Credential Manager under the service name `taskrows`. Access tokens live in memory only.
 - Nothing is stored anywhere other than your own computer and your own Google account.
 
@@ -42,7 +42,7 @@ TaskRows' use of information received from Google APIs adheres to the [Google AP
 ## 7. Retention and deletion
 
 - Signing out an account in TaskRows deletes its refresh token from Credential Manager and removes its lists from the cache.
-- Uninstall TaskRows, delete `%APPDATA%\taskrows\`, and remove the `taskrows` entries in Windows Credential Manager to remove everything.
+- Uninstall TaskRows, delete `%APPDATA%\com.kim.taskrows\`, and remove the `taskrows` entries in Windows Credential Manager to remove everything.
 - Revoke access at any time at <https://myaccount.google.com/permissions>.
 - The developer holds no copy of your data, so there is nothing for the developer to delete.
 

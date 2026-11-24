@@ -38,7 +38,7 @@ footer{margin-top:3em;color:#666;font-size:14px}
 
 <h2>4. Where the information is stored</h2>
 <ul>
-<li><strong>Task cache:</strong> a copy of your lists and tasks is saved on your computer in <code>%APPDATA%\taskrows\cache.json</code> so the app can start instantly and work offline. Account labels (email, colour) are saved in <code>%APPDATA%\taskrows\accounts.json</code>.</li>
+<li><strong>Task cache:</strong> a copy of your lists and tasks is saved on your computer in <code>%APPDATA%\com.kim.taskrows\cache.json</code> so the app can start instantly and work offline. Account labels (email, colour) are saved in <code>%APPDATA%\com.kim.taskrows\accounts.json</code>.</li>
 <li><strong>Credentials:</strong> OAuth refresh tokens, and the OAuth client ID and secret you entered, are stored in Windows Credential Manager under the service name <code>taskrows</code>. Short-lived access tokens are held in memory only and discarded when the app closes.</li>
 <li>Nothing is stored anywhere other than your own computer and your own Google account.</li>
 </ul>
@@ -52,7 +52,7 @@ footer{margin-top:3em;color:#666;font-size:14px}
 <h2>7. Retention and deletion</h2>
 <ul>
 <li>Signing out an account inside TaskRows deletes that account's refresh token from Credential Manager and removes its lists from the cache.</li>
-<li>Uninstalling TaskRows removes the application. You can delete <code>%APPDATA%\taskrows\</code> to remove the cache, and remove the <code>taskrows</code> entries in Windows Credential Manager to remove all stored credentials.</li>
+<li>Uninstalling TaskRows removes the application. You can delete <code>%APPDATA%\com.kim.taskrows\</code> to remove the cache, and remove the <code>taskrows</code> entries in Windows Credential Manager to remove all stored credentials.</li>
 <li>You can revoke TaskRows' access to your Google account at any time at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>. After revocation TaskRows can no longer read or change your tasks.</li>
 <li>Because the developer holds no copy of your data, there is nothing for the developer to delete.</li>
 </ul>
