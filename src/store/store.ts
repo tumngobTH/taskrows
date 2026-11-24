@@ -117,6 +117,9 @@ export function createTaskStore(deps: { api: TasksApi; persist: Persistence; now
       }
     }
 
+    /** Tasks with a transfer under way: a second transfer of the same task is ignored. */
+    const transfersInFlight = new Set<TaskKey>();
+
     const patched = (task: Task, patch: Partial<Task>) => ({ [taskKey(task.accountId, task.id)]: { ...task, ...patch } });
 
     /** Writes are disabled until the first sync completes. */
@@ -279,6 +282,7 @@ export function createTaskStore(deps: { api: TasksApi; persist: Persistence; now
         if (!task) return;
         const dest = parseListKey(to.listKey);
         if (dest.accountId === task.accountId) return get().moveTask(key, to);
+        if (transfersInFlight.has(key)) return; // already being transferred
         const localChildren = childrenOf(get().tasks, task);
         if (localChildren.length > 0 && to.parentId) {
           get().toast("Can't nest a task that has subtasks");
@@ -286,28 +290,6 @@ export function createTaskStore(deps: { api: TasksApi; persist: Persistence; now
         }
         const listTitle = get().lists[to.listKey]?.title ?? "list";
         const email = get().accounts.find((a) => a.id === dest.accountId)?.email ?? dest.accountId;
-
-        // Google deletes ALL of the parent's subtasks with it, but the local cache only holds tasks
-        // completed in the last 30 days: read the full source list first so none is lost.
-        // No fallback to local-only children: if this read fails the transfer is refused.
-        let remote: Task[];
-        try {
-          remote = await api.listTasks(task.accountId, task.listId, { showCompleted: true });
-        } catch (e) {
-          get().toast(`Couldn't move to ${listTitle} — ${errText(e)}`);
-          return;
-        }
-        const byId = new Map<string, Task>();
-        for (const c of remote) if (c.parent === task.id && !c.deleted) byId.set(c.id, c);
-        for (const c of localChildren) if (!byId.has(c.id)) byId.set(c.id, c); // e.g. created locally just now
-        const children = [...byId.values()].sort(comparePosition); // open and completed, in position order
-        if (children.length > 0 && to.parentId) {
-          get().toast("Can't nest a task that has subtasks");
-          return;
-        }
-
-        // Local copies with pending ids; the parent copy sorts right after `previousTaskId`.
-        const prev = to.previousTaskId ? get().tasks[taskKey(dest.accountId, to.previousTaskId)] : undefined;
         const stamp = new Date(now()).toISOString();
         const copy = (t: Task, id: string, parent: string | undefined, position: string): Task => {
           const c: Task = { accountId: dest.accountId, listId: dest.listId, id, title: t.title, status: t.status, updated: stamp, position };
@@ -317,26 +299,29 @@ export function createTaskStore(deps: { api: TasksApi; persist: Persistence; now
           if (parent !== undefined) c.parent = parent;
           return c;
         };
-        const tmpParentId = `tmp:${crypto.randomUUID()}`;
-        const temps = [
-          copy(task, tmpParentId, to.parentId ?? undefined, prev ? `${prev.position}~` : ""),
-          ...children.map((c) => copy(c, `tmp:${crypto.randomUUID()}`, tmpParentId, c.position)),
-        ];
-        const tmpKeys = temps.map((t) => taskKey(t.accountId, t.id));
-        // Every source entry (local or fetched-only) gets a tombstone at the end; only the local ones are restored.
-        const allSources = [task, ...children];
-        const sources = [task, ...localChildren];
-        const sourceKeys = sources.map((t) => taskKey(t.accountId, t.id));
-        const removeSources = (t: Tasks): Tasks =>
-          upsertTasks(t, allSources.map((x) => ({ ...x, deleted: true }))); // list-match rule: copies are untouched
 
+        // Optimistic apply, before any await: the source (and the subtasks held locally) leave at once,
+        // so no other action can reach them, and pending copies appear right after `previousTaskId`.
+        const prev = to.previousTaskId ? get().tasks[taskKey(dest.accountId, to.previousTaskId)] : undefined;
+        const tmpParentId = `tmp:${crypto.randomUUID()}`;
+        const tmpParent = copy(task, tmpParentId, to.parentId ?? undefined, prev ? `${prev.position}~` : "");
+        const tmpOf = new Map<string, Task>(); // source child id → its pending copy
+        for (const c of localChildren) tmpOf.set(c.id, copy(c, `tmp:${crypto.randomUUID()}`, tmpParentId, c.position));
+        const tmpKeys = () => [tmpParent, ...tmpOf.values()].map((t) => taskKey(t.accountId, t.id));
+        const sources = [task, ...localChildren]; // the entries removed locally (and restored on failure)
+        const sourceKeys = sources.map((t) => taskKey(t.accountId, t.id));
+        const addTemps = (t: Tasks, temps: Task[]): Tasks => {
+          const next = { ...t };
+          for (const x of temps) next[taskKey(x.accountId, x.id)] = x;
+          return next;
+        };
+        transfersInFlight.add(key);
         set((s) => {
           const t = { ...s.tasks };
           for (const k of sourceKeys) delete t[k];
-          temps.forEach((x, i) => (t[tmpKeys[i]] = x));
-          return { tasks: t };
+          return { tasks: addTemps(t, [tmpParent, ...tmpOf.values()]) };
         });
-        /** Put back the source entries a concurrent poll has not already re-added. */
+        /** Put back the source entries a concurrent poll has not already re-added (reads current state). */
         const restoreSources = (t: Tasks): Tasks => {
           const next = { ...t };
           sources.forEach((x, i) => {
@@ -346,8 +331,12 @@ export function createTaskStore(deps: { api: TasksApi; persist: Persistence; now
         };
         const dropTemps = (t: Tasks): Tasks => {
           const next = { ...t };
-          for (const k of tmpKeys) delete next[k];
+          for (const k of tmpKeys()) delete next[k];
           return next;
+        };
+        const rollback = (text: string) => {
+          set((s) => ({ tasks: restoreSources(dropTemps(s.tasks)) }));
+          get().toast(text);
         };
         const body = (t: Task) => {
           const b: { title: string; notes?: string; due?: string; status?: Task["status"]; completed?: string } = {
@@ -360,50 +349,78 @@ export function createTaskStore(deps: { api: TasksApi; persist: Persistence; now
           return b;
         };
 
-        // Phase 1: insert the copies (parent first, then each child after the previous one).
-        const created: Task[] = [];
         try {
-          const parentOpts: { parent?: string; previous?: string } = {};
-          if (to.previousTaskId) parentOpts.previous = to.previousTaskId;
-          if (to.parentId) parentOpts.parent = to.parentId;
-          const newParent = await api.insertTask(dest.accountId, dest.listId, body(task), parentOpts);
-          created.push(newParent);
-          let previous: string | undefined;
-          for (const c of children) {
-            const opts: { parent?: string; previous?: string } = { parent: newParent.id };
-            if (previous) opts.previous = previous;
-            const nc = await api.insertTask(dest.accountId, dest.listId, body(c), opts);
-            created.push(nc);
-            previous = nc.id;
-          }
-        } catch (e) {
-          // Best-effort cleanup of the copies made so far; a task must never be lost or duplicated silently.
-          for (const c of [...created].reverse()) {
-            try {
-              await api.deleteTask(dest.accountId, dest.listId, c.id);
-            } catch {
-              /* ignored: best effort */
-            }
-          }
-          set((s) => ({ tasks: restoreSources(dropTemps(s.tasks)) }));
-          get().toast(`Couldn't move to ${listTitle} — ${errText(e)}`);
-          return;
-        }
-        set((s) => ({ tasks: upsertTasks(dropTemps(s.tasks), created) }));
-
-        // Phase 2: delete the source (Google deletes its subtasks with it).
-        try {
-          await api.deleteTask(task.accountId, task.listId, task.id);
-        } catch (e) {
-          if (!(e instanceof ApiError && e.status === 404)) {
-            set((s) => ({ tasks: restoreSources(s.tasks) }));
-            get().toast(`Copied to ${email}, but the original couldn't be removed — delete it manually`);
+          // Google deletes ALL of the parent's subtasks with it, but the local cache only holds tasks
+          // completed in the last 30 days: read the full source list so none is lost.
+          // No fallback to local-only children: if this read fails the transfer is refused.
+          let remote: Task[];
+          try {
+            remote = await api.listTasks(task.accountId, task.listId, { showCompleted: true });
+          } catch (e) {
+            rollback(`Couldn't move to ${listTitle} — ${errText(e)}`);
             return;
           }
-          // 404: already gone
+          const byId = new Map<string, Task>();
+          for (const c of remote) if (c.parent === task.id && !c.deleted) byId.set(c.id, c);
+          for (const c of localChildren) if (!byId.has(c.id)) byId.set(c.id, c); // e.g. created locally just now
+          const children = [...byId.values()].sort(comparePosition); // open and completed, in position order
+          if (children.length > 0 && to.parentId) {
+            rollback("Can't nest a task that has subtasks");
+            return;
+          }
+          // Pending copies for the subtasks only Google knew about (e.g. completed long ago).
+          const fetchedOnly = children.filter((c) => !tmpOf.has(c.id));
+          for (const c of fetchedOnly) tmpOf.set(c.id, copy(c, `tmp:${crypto.randomUUID()}`, tmpParentId, c.position));
+          if (fetchedOnly.length > 0) set((s) => ({ tasks: addTemps(s.tasks, fetchedOnly.map((c) => tmpOf.get(c.id)!)) }));
+          const allSources = [task, ...children];
+
+          // Phase 1: insert the copies (parent first, then each child after the previous one).
+          const created: Task[] = [];
+          try {
+            const parentOpts: { parent?: string; previous?: string } = {};
+            if (to.previousTaskId) parentOpts.previous = to.previousTaskId;
+            if (to.parentId) parentOpts.parent = to.parentId;
+            const newParent = await api.insertTask(dest.accountId, dest.listId, body(task), parentOpts);
+            created.push(newParent);
+            let previous: string | undefined;
+            for (const c of children) {
+              const opts: { parent?: string; previous?: string } = { parent: newParent.id };
+              if (previous) opts.previous = previous;
+              const nc = await api.insertTask(dest.accountId, dest.listId, body(c), opts);
+              created.push(nc);
+              previous = nc.id;
+            }
+          } catch (e) {
+            // Best-effort cleanup of the copies made so far; a task must never be lost or duplicated silently.
+            for (const c of [...created].reverse()) {
+              try {
+                await api.deleteTask(dest.accountId, dest.listId, c.id);
+              } catch {
+                /* ignored: best effort */
+              }
+            }
+            rollback(`Couldn't move to ${listTitle} — ${errText(e)}`);
+            return;
+          }
+          set((s) => ({ tasks: upsertTasks(dropTemps(s.tasks), created) }));
+
+          // Phase 2: delete the source (Google deletes its subtasks with it).
+          try {
+            await api.deleteTask(task.accountId, task.listId, task.id);
+          } catch (e) {
+            if (!(e instanceof ApiError && e.status === 404)) {
+              set((s) => ({ tasks: restoreSources(s.tasks) }));
+              get().toast(`Copied to ${email}, but the original couldn't be removed — delete it manually`);
+              return;
+            }
+            // 404: already gone
+          }
+          // A poll during the inserts may have re-added the source (it still existed on Google): drop it.
+          // Tombstones only remove entries in the source list, so the copies in the other account are safe.
+          set((s) => ({ tasks: upsertTasks(s.tasks, allSources.map((x) => ({ ...x, deleted: true }))) }));
+        } finally {
+          transfersInFlight.delete(key);
         }
-        // A poll during the inserts may have re-added the source (it still existed on Google): drop it.
-        set((s) => ({ tasks: removeSources(s.tasks) }));
       },
 
       // ---- layout (Task 5 reducers + persist) ----

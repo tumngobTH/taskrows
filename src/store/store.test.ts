@@ -473,15 +473,47 @@ describe("store", () => {
       expect(store.getState().toasts).toEqual([]);
     });
 
-    it("a_failed_prefetch_refuses_the_transfer", async () => {
+    it("the_source_leaves_at_once_and_a_failed_read_restores_it", async () => {
       const { api, store } = twoAccounts();
       const before = store.getState().tasks;
-      api.listTasks.mockRejectedValue(new ApiError(503, "backendError", "Offline"));
-      await store.getState().transferTask(taskKey("a", "p"), { listKey: listKey("b", "M1"), previousTaskId: null });
-      expect(store.getState().tasks).toBe(before);
+      let fail!: (e: Error) => void;
+      api.listTasks.mockReturnValue(new Promise<Task[]>((_r, j) => (fail = j)));
+      const p = store.getState().transferTask(taskKey("a", "p"), { listKey: listKey("b", "M1"), previousTaskId: null });
+      // (b) before the read resolves: source and local subtasks gone, pending copies shown
+      const mid = store.getState().tasks;
+      for (const k of srcKeys) expect(mid[k]).toBeUndefined();
+      expect(Object.values(mid).filter((t) => t.id.startsWith("tmp:"))).toHaveLength(3);
+      // (c) the read fails: the local entries come back, the pending copies go, nothing was written
+      fail(new ApiError(503, "backendError", "Offline"));
+      await p;
+      expect(store.getState().tasks).toEqual(before);
       expect(api.insertTask).not.toHaveBeenCalled();
       expect(api.deleteTask).not.toHaveBeenCalled();
       expect(store.getState().toasts.map((x) => x.text)).toEqual(["Couldn't move to Shared — Offline"]);
+    });
+
+    it("a_second_transfer_of_the_same_task_while_one_is_running_is_ignored", async () => {
+      const { api, store } = twoAccounts();
+      const local = Object.values(store.getState().tasks).filter((t) => t.listId === "L1");
+      let answer!: (t: Task[]) => void;
+      api.listTasks.mockReturnValue(new Promise<Task[]>((r) => (answer = r)));
+      const to = { listKey: listKey("b", "M1"), previousTaskId: null };
+      const first = store.getState().transferTask(taskKey("a", "p"), to);
+      // the key is already gone from the store, and the in-flight guard covers a stale caller too
+      store.setState((s) => ({ tasks: { ...s.tasks, [taskKey("a", "p")]: local.find((t) => t.id === "p")! } }));
+      const second = store.getState().transferTask(taskKey("a", "p"), to);
+      await second;
+      expect(api.listTasks).toHaveBeenCalledTimes(1);
+      answer(local);
+      await first;
+      expect(api.listTasks).toHaveBeenCalledTimes(1);
+      expect(api.insertTask).toHaveBeenCalledTimes(3);
+      expect(api.deleteTask).toHaveBeenCalledTimes(1);
+      const copies = Object.values(store.getState().tasks).filter((t) => t.accountId === "b" && t.id !== "X");
+      expect(copies.map((t) => t.id).sort()).toEqual(["new1", "new2", "new3"]);
+      expect(Object.keys(store.getState().tasks).some((k) => k.includes("tmp:"))).toBe(false);
+      for (const k of srcKeys) expect(store.getState().tasks[k]).toBeUndefined();
+      expect(store.getState().toasts).toEqual([]);
     });
 
     it("a_poll_that_re_adds_the_source_mid_transfer_is_cleaned_up", async () => {
