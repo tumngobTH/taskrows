@@ -28,20 +28,26 @@ export default function TaskItem({ task, depth, dotColor }: { task: Task; depth:
     data,
     disabled: dragOff,
   });
+  // Pointer drag starts from anywhere on the row except interactive controls; keyboard drag stays on the grip.
+  const onRowPointerDown = (e: React.PointerEvent<HTMLLIElement>) => {
+    if ((e.target as HTMLElement).closest("input, textarea, button, select, [contenteditable]")) return;
+    listeners?.onPointerDown?.(e);
+  };
   return (
     <li
       ref={setNodeRef}
-      className={`task${done ? " done" : ""}${isDragging ? " dragging" : ""}`}
+      className={`task${dragOff ? "" : " draggable"}${done ? " done" : ""}${isDragging ? " dragging" : ""}`}
+      onPointerDown={dragOff ? undefined : onRowPointerDown}
       data-task-key={key}
       data-depth={depth}
       data-pending={pending ? "true" : undefined}
       style={{ "--depth": depth, transform: CSS.Translate.toString(transform), transition } as React.CSSProperties}
     >
-      {/* Dedicated drag handle: keeps Space/Enter on the checkbox a native toggle, not a keyboard drag. */}
+      {/* Keyboard drag handle (only onKeyDown here): keeps Space/Enter on the checkbox a native toggle, not a keyboard drag. */}
       {dragOff ? (
         <span className="grip off" aria-hidden="true" />
       ) : (
-        <span className="grip" ref={setActivatorNodeRef} {...attributes} {...listeners} aria-label="Drag task">
+        <span className="grip" ref={setActivatorNodeRef} {...attributes} onKeyDown={listeners?.onKeyDown as React.KeyboardEventHandler<HTMLSpanElement> | undefined} aria-label="Drag task">
           ⋮⋮
         </span>
       )}
