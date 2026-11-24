@@ -336,6 +336,7 @@ describe("store", () => {
         true,
       );
       store.getState().applyListTasks(listKey("b", "M1"), [task("b", "M1", "X", { position: "00000000000000000003" })], true);
+      api.listTasks.mockImplementation(async () => Object.values(store.getState().tasks).filter((t) => t.listId === "L1"));
       let n = 0;
       api.insertTask.mockImplementation(async (acc: string, list: string, body: Partial<Task>, opts: { parent?: string }) =>
         task(acc, list, `new${++n}`, { ...body, parent: opts.parent }),
@@ -348,9 +349,17 @@ describe("store", () => {
       const { api, store } = twoAccounts();
       let release!: () => void;
       api.deleteTask.mockReturnValue(new Promise<void>((r) => (release = r)));
+      let openGate!: () => void;
+      const gate = new Promise<void>((r) => (openGate = r));
+      const insert = api.insertTask.getMockImplementation()!;
+      api.insertTask.mockImplementation(async (...args: Parameters<typeof insert>) => {
+        await gate;
+        return insert(...args);
+      });
 
       const p = store.getState().transferTask(taskKey("a", "p"), { listKey: listKey("b", "M1"), previousTaskId: "X" });
-      // optimistic: source gone, pending copies in the target right after X
+      // optimistic (after the source-list read): source gone, pending copies in the target right after X
+      await vi.waitFor(() => expect(store.getState().tasks[taskKey("a", "p")]).toBeUndefined());
       const mid = store.getState().tasks;
       for (const k of srcKeys) expect(mid[k]).toBeUndefined();
       const pending = Object.values(mid).filter((t) => t.id.startsWith("tmp:"));
@@ -359,6 +368,7 @@ describe("store", () => {
       expect(tmpParent).toMatchObject({ accountId: "b", listId: "M1", title: "งานส่งลูกค้า" });
       expect(tmpParent.position > mid[taskKey("b", "X")].position).toBe(true);
       expect(pending.filter((t) => t.parent === tmpParent.id)).toHaveLength(2);
+      openGate();
 
       await vi.waitFor(() => expect(api.deleteTask).toHaveBeenCalled());
       expect(Object.keys(store.getState().tasks).some((k) => k.includes("tmp:"))).toBe(false);
@@ -435,6 +445,62 @@ describe("store", () => {
       expect(store.getState().toasts.map((x) => x.text)).toEqual([
         "Copied to b@x.com, but the original couldn't be removed — delete it manually",
       ]);
+    });
+
+    it("old_completed_subtasks_missing_locally_are_fetched_and_copied", async () => {
+      const { api, store } = twoAccounts();
+      const old = task("a", "L1", "c0", {
+        parent: "p",
+        position: "00000000000000000000",
+        status: "completed",
+        completed: "2025-01-01T00:00:00.000Z",
+      });
+      const local = Object.values(store.getState().tasks).filter((t) => t.listId === "L1");
+      // remote has the old child; it lacks local c1 (just created locally) — the union keeps both
+      api.listTasks.mockResolvedValue([...local.filter((t) => t.id !== "c1"), old, task("a", "L1", "z", { parent: "other" })]);
+
+      await store.getState().transferTask(taskKey("a", "p"), { listKey: listKey("b", "M1"), previousTaskId: null });
+      expect(api.listTasks).toHaveBeenCalledWith("a", "L1", { showCompleted: true });
+      expect(api.insertTask.mock.calls.map((c) => [c[2].title, c[3]])).toEqual([
+        ["งานส่งลูกค้า", {}],
+        ["c0", { parent: "new1" }],
+        ["c1", { parent: "new1", previous: "new2" }],
+        ["c2", { parent: "new1", previous: "new3" }],
+      ]);
+      expect(api.insertTask.mock.calls[1][2]).toEqual({ title: "c0", status: "completed", completed: "2025-01-01T00:00:00.000Z" });
+      expect(store.getState().tasks[taskKey("b", "new2")]).toMatchObject({ title: "c0", parent: "new1", status: "completed" });
+      expect(store.getState().tasks[taskKey("a", "c0")]).toBeUndefined();
+      expect(store.getState().toasts).toEqual([]);
+    });
+
+    it("a_failed_prefetch_refuses_the_transfer", async () => {
+      const { api, store } = twoAccounts();
+      const before = store.getState().tasks;
+      api.listTasks.mockRejectedValue(new ApiError(503, "backendError", "Offline"));
+      await store.getState().transferTask(taskKey("a", "p"), { listKey: listKey("b", "M1"), previousTaskId: null });
+      expect(store.getState().tasks).toBe(before);
+      expect(api.insertTask).not.toHaveBeenCalled();
+      expect(api.deleteTask).not.toHaveBeenCalled();
+      expect(store.getState().toasts.map((x) => x.text)).toEqual(["Couldn't move to Shared — Offline"]);
+    });
+
+    it("a_poll_that_re_adds_the_source_mid_transfer_is_cleaned_up", async () => {
+      const { api, store } = twoAccounts();
+      const sourceTasks = Object.values(store.getState().tasks).filter((t) => t.listId === "L1");
+      for (const fail of [false, true]) {
+        api.deleteTask.mockImplementationOnce(async () => {
+          // full poll of the source list while the source still exists on Google
+          store.getState().applyListTasks(listKey("a", "L1"), sourceTasks, true);
+          if (fail) throw new ApiError(404, "notFound", "gone");
+        });
+        await store.getState().transferTask(taskKey("a", "p"), { listKey: listKey("b", "M1"), previousTaskId: null });
+        const t = store.getState().tasks;
+        for (const k of srcKeys) expect(t[k]).toBeUndefined();
+        expect(store.getState().toasts).toEqual([]);
+        // put the source back for the 404 round
+        store.getState().applyListTasks(listKey("a", "L1"), sourceTasks, true);
+      }
+      expect(Object.values(store.getState().tasks).filter((t) => t.accountId === "b" && t.parent === undefined && t.id !== "X")).toHaveLength(2);
     });
 
     it("refused_while_writes_are_off", async () => {
