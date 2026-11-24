@@ -54,8 +54,9 @@ html[data-font="L"] { font-size: 16px; }
   display: flex; align-items: flex-start; gap: 6px;
   padding: 4px 4px 4px calc(var(--depth) * 20px + 4px);
 }
-.task:hover { background: var(--bg-elevated); border-radius: 4px; }
+.task:hover { background: color-mix(in srgb, var(--fg) 7%, transparent); border-radius: 4px; }
 .task.draggable { cursor: grab; }
+.task.draggable input[type="checkbox"], .task.draggable button { cursor: default; }
 .task input[type="checkbox"] { margin-top: 3px; flex: none; }
 .task .dot { margin-top: 6px; }
 .task .title { flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: normal; }
