@@ -68,12 +68,44 @@ describe("BoardDnd drop handling", () => {
     );
   });
 
-  it("refuses a cross-account drop with a toast and no store write", () => {
+  it("a cross-account drop on a task transfers instead of moving", () => {
     const { store, moveTask } = setup();
-    handleDragEnd(ev(task("a1:t2", "a1:l1"), task("a2:v1", "a2:l3")));
+    const transferTask = vi.fn(async () => {});
+    store.setState({ transferTask });
+    handleDragEnd(ev(task("a1:t2", "a1:l1"), task("a2:v1", "a2:l3"), true));
     expect(moveTask).not.toHaveBeenCalled();
-    expect(store.getState().toasts.map((t) => t.text)).toEqual(["Can't move tasks between accounts"]);
-    expect(store.getState().tasks["a1:t2"].listId).toBe("l1");
+    expect(transferTask).toHaveBeenCalledWith("a1:t2", { listKey: "a2:l3", previousTaskId: "v1", parentId: null });
+    expect(store.getState().toasts).toEqual([]);
+  });
+
+  it("a drop on a merged column body prefers the dragged task's own account, else transfers to the slot target", async () => {
+    const { store, moveTask } = setup();
+    // "Work" exists in both accounts → merged column; its new-task target is a2.
+    store.getState().setLists("a2", [
+      { accountId: "a2", id: "l3", title: "Other", updated: "" },
+      { accountId: "a2", id: "l9", title: "Work", updated: "" },
+    ]);
+    const merged = store.getState().groups.find((g) => g.members.includes("a1:l1") && g.members.includes("a2:l9"))!;
+    store.getState().setNewTaskTarget(merged.key, "a2");
+    const transferTask = vi.fn(async () => {});
+    store.setState({ transferTask });
+
+    // a1's task from Home dropped on the merged Work column → a1:l1 (same account: plain move)
+    handleDragEnd(ev(task("a1:u1", "a1:l2"), { type: "column", slotKey: merged.key }));
+    await vi.waitFor(() => expect(moveTask).toHaveBeenCalledWith("a1", "l2", "u1", { destinationTasklist: "l1" }));
+    expect(transferTask).not.toHaveBeenCalled();
+
+    // a2's task from Other: own-account member a2:l9 exists → plain move too
+    moveTask.mockClear();
+    handleDragEnd(ev(task("a2:v1", "a2:l3"), { type: "column", slotKey: merged.key }));
+    await vi.waitFor(() => expect(moveTask).toHaveBeenCalledWith("a2", "l3", "v1", { destinationTasklist: "l9" }));
+
+    // a column with no member of the task's account goes to the slot target → transfer
+    moveTask.mockClear();
+    const other = store.getState().groups.find((g) => g.members.length === 1 && g.members[0] === "a2:l3")!;
+    handleDragEnd(ev(task("a1:t2", "a1:l1"), { type: "column", slotKey: other.key }));
+    expect(transferTask).toHaveBeenCalledWith("a1:t2", { listKey: "a2:l3", previousTaskId: null, parentId: null });
+    expect(moveTask).not.toHaveBeenCalled();
   });
 
   it("refuses moving a subtask out of its parent", () => {

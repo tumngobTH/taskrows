@@ -95,7 +95,7 @@ export class TasksApi {
   async insertTask(
     accountId: AccountId,
     listId: string,
-    body: { title: string; notes?: string; due?: string },
+    body: { title: string; notes?: string; due?: string; status?: Task["status"]; completed?: string },
     opts: { parent?: string; previous?: string } = {},
   ): Promise<Task> {
     const q = new URLSearchParams();

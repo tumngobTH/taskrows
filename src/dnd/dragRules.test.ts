@@ -18,11 +18,20 @@ describe("dragRules", () => {
     expect(canDropTask(mk("t1", "1"), { listKey: "a1:l2", accountId: "a1", parentId: null })).toEqual({ ok: true });
   });
 
-  it("cross_account_drop_refused_with_reason", () => {
-    expect(canDropTask(mk("t1", "1"), { listKey: "a2:l9", accountId: "a2", parentId: null })).toEqual({
+  it("cross_account_drop_is_allowed_but_a_subtask_still_stays_in_its_parent", () => {
+    expect(canDropTask(mk("t1", "1"), { listKey: "a2:l9", accountId: "a2", parentId: null })).toEqual({ ok: true });
+    expect(canDropTask(mk("t1", "1"), { listKey: "a2:l9", accountId: "a2", parentId: null }, { hasChildren: true })).toEqual({ ok: true });
+    expect(canDropTask(mk("s1", "1", { parent: "p1" }), { listKey: "a2:l9", accountId: "a2", parentId: null })).toEqual({
       ok: false,
-      reason: "Can't move tasks between accounts",
+      reason: "Can't move a subtask out of its parent",
     });
+  });
+
+  it("a_task_with_subtasks_cannot_be_nested", () => {
+    const reason = "Can't nest a task that has subtasks";
+    expect(canDropTask(mk("t1", "1"), { listKey: "a1:l1", accountId: "a1", parentId: "p9" }, { hasChildren: true })).toEqual({ ok: false, reason });
+    expect(canDropTask(mk("t1", "1"), { listKey: "a2:l9", accountId: "a2", parentId: "p9" }, { hasChildren: true })).toEqual({ ok: false, reason });
+    expect(canDropTask(mk("t1", "1"), { listKey: "a2:l9", accountId: "a2", parentId: "p9" })).toEqual({ ok: true });
   });
 
   it("plan_sets_previous_id_from_index", () => {

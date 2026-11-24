@@ -3,7 +3,7 @@ import { useTaskStore } from "../store/store";
 import { dueToYmd, ymdToDue } from "../lib/dates";
 import { listKey } from "../lib/ids";
 import PopoverMenu from "./PopoverMenu";
-import type { TaskKey } from "../types";
+import type { TaskKey, TaskList } from "../types";
 
 export default function TaskMenu({ taskKey }: { taskKey: TaskKey }) {
   const task = useTaskStore((s) => s.tasks[taskKey]);
@@ -12,6 +12,8 @@ export default function TaskMenu({ taskKey }: { taskKey: TaskKey }) {
   const updateTask = useTaskStore((s) => s.updateTask);
   const deleteTask = useTaskStore((s) => s.deleteTask);
   const moveTask = useTaskStore((s) => s.moveTask);
+  const transferTask = useTaskStore((s) => s.transferTask);
+  const accounts = useTaskStore((s) => s.accounts);
   const [panel, setPanel] = useState<"notes" | "move" | null>(null);
   const notesDraft = useRef<string | null>(null); // unsaved textarea content
   const [dateDraft, setDateDraft] = useState<string | null>(null);
@@ -32,7 +34,19 @@ export default function TaskMenu({ taskKey }: { taskKey: TaskKey }) {
     savedDue.current = due;
     void updateTask(taskKey, { due });
   };
-  const targets = Object.values(lists).filter((l) => l.accountId === task.accountId && l.id !== task.listId);
+  // Every list of every account except the current one; another account's list is a transfer (to the top).
+  const targets = Object.values(lists).filter((l) => !(l.accountId === task.accountId && l.id === task.listId));
+  const sections: { email: string | null; lists: TaskList[] }[] =
+    accounts.length > 1
+      ? accounts
+          .map((a) => ({ email: a.email as string | null, lists: targets.filter((l) => l.accountId === a.id) }))
+          .filter((g) => g.lists.length > 0)
+      : [{ email: null, lists: targets }];
+  const moveTo = (l: TaskList) => {
+    const to = { listKey: listKey(l.accountId, l.id), previousTaskId: null };
+    if (l.accountId === task.accountId) void moveTask(taskKey, to);
+    else void transferTask(taskKey, { ...to, parentId: null });
+  };
 
   return (
     <PopoverMenu ariaLabel="Task menu" onClose={flushNotes}>
@@ -89,20 +103,24 @@ export default function TaskMenu({ taskKey }: { taskKey: TaskKey }) {
           )}
           {panel === "move" &&
             !task.parent &&
-            targets.map((l) => (
-              <button
-                key={l.id}
-                type="button"
-               
-                className="sub"
-                disabled={!writes}
-                onClick={() => {
-                  void moveTask(taskKey, { listKey: listKey(l.accountId, l.id), previousTaskId: null });
-                  close();
-                }}
-              >
-                {l.title}
-              </button>
+            sections.map((sec) => (
+              <div key={sec.email ?? ""} className="menu-group" role="group" aria-label={sec.email ?? "Lists"}>
+                {sec.email && <div className="menu-group-label">{sec.email}</div>}
+                {sec.lists.map((l) => (
+                  <button
+                    key={listKey(l.accountId, l.id)}
+                    type="button"
+                    className="sub"
+                    disabled={!writes}
+                    onClick={() => {
+                      moveTo(l);
+                      close();
+                    }}
+                  >
+                    {l.title}
+                  </button>
+                ))}
+              </div>
             ))}
           <button
             type="button"

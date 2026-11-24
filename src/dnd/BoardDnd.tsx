@@ -15,7 +15,7 @@ import {
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { getAppStore, useTaskStore } from "../store/store";
-import { comparePosition, tasksOfList } from "../sync/merge";
+import { childrenOf, comparePosition, tasksOfList } from "../sync/merge";
 import { listKey as toListKey, parseListKey } from "../lib/ids";
 import { canDropTask, slotTargetAccount, taskDropPlan, taskInsertIndex, type DragItem } from "./dragRules";
 import type { ListKey, SlotKey, Task, TaskKey } from "../types";
@@ -131,14 +131,17 @@ export function handleDragEnd(e: DragEndEvent): void {
   } else if (over.type === "column") {
     const group = s.groups.find((g) => g.key === over.slotKey);
     if (!group) return;
+    // Prefer the dragged task's own account (a plain move); else the column's new-task target (a transfer).
+    const own = group.members.find((m) => parseListKey(m).accountId === task.accountId);
     const acct = slotTargetAccount(group, s.layout);
-    const lk = group.members.find((m) => parseListKey(m).accountId === acct);
+    const lk = own ?? group.members.find((m) => parseListKey(m).accountId === acct);
     if (!lk) return;
     target = { listKey: lk, parentId: null, overId: null };
   } else return;
 
   const accountId = parseListKey(target.listKey).accountId;
-  const check = canDropTask(task, { listKey: target.listKey, accountId, parentId: target.parentId });
+  const hasChildren = childrenOf(s.tasks, task).length > 0;
+  const check = canDropTask(task, { listKey: target.listKey, accountId, parentId: target.parentId }, { hasChildren });
   if (!check.ok) {
     s.toast(check.reason);
     return;
@@ -152,7 +155,8 @@ export function handleDragEnd(e: DragEndEvent): void {
     target.parentId === (task.parent ?? null) &&
     plan.previousTaskId === (siblings[siblings.findIndex((t) => t.id === task.id) - 1]?.id ?? null);
   if (sameSpot) return;
-  void s.moveTask(active.taskKey, plan);
+  if (accountId !== task.accountId) void s.transferTask(active.taskKey, plan);
+  else void s.moveTask(active.taskKey, plan);
 }
 
 function Overlay({ item }: { item: DragItem }) {

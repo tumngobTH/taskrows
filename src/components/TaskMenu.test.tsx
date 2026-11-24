@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import TaskMenu from "./TaskMenu";
 import { createTaskStore, setAppStore } from "../store/store";
 import { createMemoryPersistence } from "../layout/persistence";
@@ -13,11 +13,17 @@ const setup = (writesEnabled = true, extra: { parent?: string } = {}) => {
   const updateTask = vi.fn(async () => {});
   const deleteTask = vi.fn(async () => {});
   const moveTask = vi.fn(async () => {});
+  const transferTask = vi.fn(async () => {});
   store.setState({
     writesEnabled,
     updateTask,
     deleteTask,
     moveTask,
+    transferTask,
+    accounts: [
+      { id: "a", email: "a@x.com", color: "#2563eb", needsReauth: false },
+      { id: "b", email: "b@x.com", color: "#16a34a", needsReauth: false },
+    ],
     lists: {
       "a:l1": { accountId: "a", id: "l1", title: "Home", updated: "" },
       "a:l2": { accountId: "a", id: "l2", title: "Work", updated: "" },
@@ -27,7 +33,7 @@ const setup = (writesEnabled = true, extra: { parent?: string } = {}) => {
   });
   render(<TaskMenu taskKey={KEY} />);
   fireEvent.click(screen.getByRole("button", { name: "Task menu" }));
-  return { updateTask, deleteTask, moveTask };
+  return { updateTask, deleteTask, moveTask, transferTask };
 };
 
 beforeEach(() => vi.restoreAllMocks());
@@ -94,13 +100,25 @@ describe("TaskMenu", () => {
     expect(deleteTask).toHaveBeenCalledWith(KEY);
   });
 
-  it("Move to list offers only the same account's other lists", () => {
-    const { moveTask } = setup();
+  it("Move to list moves within the account (current list not offered)", () => {
+    const { moveTask, transferTask } = setup();
     fireEvent.click(screen.getByRole("button", { name: "Move to list…" }));
     expect(screen.queryByRole("button", { name: "Home" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Other acct" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Work" }));
     expect(moveTask).toHaveBeenCalledWith(KEY, { listKey: "a:l2", previousTaskId: null });
+    expect(transferTask).not.toHaveBeenCalled();
+  });
+
+  it("Move to list groups lists by account email and transfers to another account's list", () => {
+    const { moveTask, transferTask } = setup();
+    fireEvent.click(screen.getByRole("button", { name: "Move to list…" }));
+    const other = screen.getByRole("group", { name: "b@x.com" });
+    expect(other).toHaveTextContent("b@x.com");
+    expect(within(other).getByRole("button", { name: "Other acct" })).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "a@x.com" })).getByRole("button", { name: "Work" })).toBeInTheDocument();
+    fireEvent.click(within(other).getByRole("button", { name: "Other acct" }));
+    expect(transferTask).toHaveBeenCalledWith(KEY, { listKey: "b:l3", previousTaskId: null, parentId: null });
+    expect(moveTask).not.toHaveBeenCalled();
   });
 
   it("notes save on blur, empty becomes null", () => {

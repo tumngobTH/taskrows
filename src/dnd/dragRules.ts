@@ -6,14 +6,20 @@ export type DragItem = { type: "slot"; slotKey: SlotKey } | { type: "task"; task
 
 export type DropCheck = { ok: true } | { ok: false; reason: string };
 
+/**
+ * Whether `task` may be dropped at `target`. Cross-account drops are allowed (the store transfers
+ * them by copy-then-delete). Google allows one level of nesting, so a task that has subtasks
+ * (`hasChildren`, open or completed) can't be dropped under another task.
+ */
 export function canDropTask(
   task: Task,
   target: { listKey: ListKey; accountId: AccountId; parentId: string | null },
+  opts: { hasChildren?: boolean } = {},
 ): DropCheck {
   if (task.parent && (target.listKey !== listKey(task.accountId, task.listId) || target.parentId !== task.parent)) {
     return { ok: false, reason: "Can't move a subtask out of its parent" };
   }
-  if (target.accountId !== task.accountId) return { ok: false, reason: "Can't move tasks between accounts" };
+  if (opts.hasChildren && target.parentId !== null) return { ok: false, reason: "Can't nest a task that has subtasks" };
   return { ok: true };
 }
 

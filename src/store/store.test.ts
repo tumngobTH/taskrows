@@ -319,4 +319,141 @@ describe("store", () => {
     expect(store.getState().tasks[taskKey("a", "c1")]).toMatchObject({ listId: "L2", parent: "p" });
     expect(store.getState().tasks[taskKey("a", "p")].listId).toBe("L2");
   });
+
+  describe("transferTask", () => {
+    function twoAccounts() {
+      const ctx = setup([acct("a"), acct("b", "#16a34a")]);
+      const { store, api } = ctx;
+      store.getState().setLists("a", [tl("a", "L1", "Inbox")]);
+      store.getState().setLists("b", [tl("b", "M1", "Shared")]);
+      store.getState().applyListTasks(
+        listKey("a", "L1"),
+        [
+          task("a", "L1", "p", { title: "งานส่งลูกค้า", notes: "n", due: "2026-12-01T00:00:00.000Z", position: "00000000000000000005" }),
+          task("a", "L1", "c1", { parent: "p", position: "00000000000000000001" }),
+          task("a", "L1", "c2", { parent: "p", position: "00000000000000000002", status: "completed", completed: "2026-11-20T00:00:00.000Z" }),
+        ],
+        true,
+      );
+      store.getState().applyListTasks(listKey("b", "M1"), [task("b", "M1", "X", { position: "00000000000000000003" })], true);
+      let n = 0;
+      api.insertTask.mockImplementation(async (acc: string, list: string, body: Partial<Task>, opts: { parent?: string }) =>
+        task(acc, list, `new${++n}`, { ...body, parent: opts.parent }),
+      );
+      return ctx;
+    }
+    const srcKeys = [taskKey("a", "p"), taskKey("a", "c1"), taskKey("a", "c2")];
+
+    it("copies_parent_then_children_then_deletes_the_source", async () => {
+      const { api, store } = twoAccounts();
+      let release!: () => void;
+      api.deleteTask.mockReturnValue(new Promise<void>((r) => (release = r)));
+
+      const p = store.getState().transferTask(taskKey("a", "p"), { listKey: listKey("b", "M1"), previousTaskId: "X" });
+      // optimistic: source gone, pending copies in the target right after X
+      const mid = store.getState().tasks;
+      for (const k of srcKeys) expect(mid[k]).toBeUndefined();
+      const pending = Object.values(mid).filter((t) => t.id.startsWith("tmp:"));
+      expect(pending).toHaveLength(3);
+      const tmpParent = pending.find((t) => !t.parent?.startsWith("tmp:"))!;
+      expect(tmpParent).toMatchObject({ accountId: "b", listId: "M1", title: "งานส่งลูกค้า" });
+      expect(tmpParent.position > mid[taskKey("b", "X")].position).toBe(true);
+      expect(pending.filter((t) => t.parent === tmpParent.id)).toHaveLength(2);
+
+      await vi.waitFor(() => expect(api.deleteTask).toHaveBeenCalled());
+      expect(Object.keys(store.getState().tasks).some((k) => k.includes("tmp:"))).toBe(false);
+      release();
+      await p;
+
+      expect(api.insertTask.mock.calls).toEqual([
+        ["b", "M1", { title: "งานส่งลูกค้า", notes: "n", due: "2026-12-01T00:00:00.000Z", status: "needsAction" }, { previous: "X" }],
+        ["b", "M1", { title: "c1", status: "needsAction" }, { parent: "new1" }],
+        ["b", "M1", { title: "c2", status: "completed", completed: "2026-11-20T00:00:00.000Z" }, { parent: "new1", previous: "new2" }],
+      ]);
+      expect(api.deleteTask).toHaveBeenCalledTimes(1);
+      expect(api.deleteTask).toHaveBeenCalledWith("a", "L1", "p");
+      const t = store.getState().tasks;
+      for (const k of srcKeys) expect(t[k]).toBeUndefined();
+      expect(Object.keys(t).some((k) => k.includes("tmp:"))).toBe(false);
+      expect(t[taskKey("b", "new1")]).toMatchObject({ listId: "M1", title: "งานส่งลูกค้า" });
+      expect(t[taskKey("b", "new2")]).toMatchObject({ parent: "new1" });
+      expect(t[taskKey("b", "new3")]).toMatchObject({ parent: "new1", status: "completed" });
+      expect(store.getState().toasts).toEqual([]);
+    });
+
+    it("insert_failure_deletes_copies_made_and_restores_the_source", async () => {
+      const { api, store } = twoAccounts();
+      const before = store.getState().tasks;
+      let n = 0;
+      api.insertTask.mockImplementation(async (acc: string, list: string, body: Partial<Task>) => {
+        if (++n === 3) throw new ApiError(500, "backendError", "Boom");
+        return task(acc, list, `new${n}`, body);
+      });
+
+      await store.getState().transferTask(taskKey("a", "p"), { listKey: listKey("b", "M1"), previousTaskId: null });
+      expect(api.deleteTask.mock.calls.map((c) => c.slice(0, 3)).sort()).toEqual([
+        ["b", "M1", "new1"],
+        ["b", "M1", "new2"],
+      ]);
+      expect(api.deleteTask).not.toHaveBeenCalledWith("a", "L1", "p");
+      const t = store.getState().tasks;
+      for (const k of srcKeys) expect(t[k]).toEqual(before[k]);
+      expect(Object.keys(t).some((k) => k.includes("tmp:"))).toBe(false);
+      expect(Object.keys(t).sort()).toEqual(Object.keys(before).sort());
+      expect(store.getState().toasts.map((x) => x.text)).toEqual(["Couldn't move to Shared — Boom"]);
+    });
+
+    it("cleanup_delete_errors_are_ignored", async () => {
+      const { api, store } = twoAccounts();
+      api.insertTask.mockRejectedValueOnce(new Error("first")); // parent insert fails: nothing to clean up
+      await store.getState().transferTask(taskKey("a", "p"), { listKey: listKey("b", "M1"), previousTaskId: null });
+      expect(api.deleteTask).not.toHaveBeenCalled();
+      expect(store.getState().toasts.map((x) => x.text)).toEqual(["Couldn't move to Shared — first"]);
+
+      let n = 0;
+      api.insertTask.mockImplementation(async (acc: string, list: string, body: Partial<Task>) => {
+        if (++n === 2) throw new Error("second");
+        return task(acc, list, `z${n}`, body);
+      });
+      api.deleteTask.mockRejectedValue(new Error("cleanup failed"));
+      await store.getState().transferTask(taskKey("a", "p"), { listKey: listKey("b", "M1"), previousTaskId: null });
+      expect(api.deleteTask).toHaveBeenCalledWith("b", "M1", "z1");
+      expect(store.getState().tasks[taskKey("a", "p")]).toBeDefined();
+      expect(store.getState().toasts.map((x) => x.text)).toEqual(["Couldn't move to Shared — first", "Couldn't move to Shared — second"]);
+    });
+
+    it("source_delete_failure_keeps_copies_and_restores_source", async () => {
+      const { api, store } = twoAccounts();
+      const before = store.getState().tasks;
+      api.deleteTask.mockRejectedValue(new ApiError(500, "backendError", "Nope"));
+
+      await store.getState().transferTask(taskKey("a", "p"), { listKey: listKey("b", "M1"), previousTaskId: null });
+      const t = store.getState().tasks;
+      for (const k of srcKeys) expect(t[k]).toEqual(before[k]);
+      for (const id of ["new1", "new2", "new3"]) expect(t[taskKey("b", id)]).toBeDefined();
+      expect(Object.keys(t).some((k) => k.includes("tmp:"))).toBe(false);
+      expect(store.getState().toasts.map((x) => x.text)).toEqual([
+        "Copied to b@x.com, but the original couldn't be removed — delete it manually",
+      ]);
+    });
+
+    it("refused_while_writes_are_off", async () => {
+      const { api, store } = twoAccounts();
+      store.setState({ writesEnabled: false });
+      const before = store.getState().tasks;
+      await store.getState().transferTask(taskKey("a", "p"), { listKey: listKey("b", "M1"), previousTaskId: null });
+      expect(store.getState().tasks).toBe(before);
+      expect(api.insertTask).not.toHaveBeenCalled();
+      expect(api.deleteTask).not.toHaveBeenCalled();
+      // only the standard write gate message, no transfer toast
+      expect(store.getState().toasts.map((x) => x.text)).toEqual(["Still syncing — try again in a moment"]);
+    });
+
+    it("a_task_with_subtasks_is_not_nested", async () => {
+      const { api, store } = twoAccounts();
+      await store.getState().transferTask(taskKey("a", "p"), { listKey: listKey("b", "M1"), previousTaskId: null, parentId: "X" });
+      expect(api.insertTask).not.toHaveBeenCalled();
+      expect(store.getState().toasts.map((x) => x.text)).toEqual(["Can't nest a task that has subtasks"]);
+    });
+  });
 });

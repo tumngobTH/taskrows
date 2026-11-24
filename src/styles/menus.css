@@ -9,6 +9,8 @@
 .popover-menu button:disabled { opacity: 0.5; cursor: default; }
 .popover-menu button.sub { padding-left: 20px; }
 .popover-menu button.danger { color: var(--red); }
+.popover-menu .menu-group { display: flex; flex-direction: column; gap: 2px; }
+.popover-menu .menu-group-label { padding: 5px 8px 0; font-size: 0.8em; color: var(--fg-muted); overflow-wrap: anywhere; }
 .popover-menu textarea, .popover-menu input[type="date"] { font: inherit; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; }
 .popover-menu textarea { width: 100%; box-sizing: border-box; resize: vertical; }
 .popover-menu .menu-field { display: flex; align-items: center; gap: 6px; padding: 2px 8px; }
