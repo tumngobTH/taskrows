@@ -20,9 +20,10 @@ TaskRows talks to Google Tasks with **your own** Google Cloud OAuth client. You 
 5. **Fill in Branding.** Google refuses to publish until the **Branding** page has all four of these; fill them before clicking Publish:
    - **App name**: `TaskRows`.
    - **User support email**: your own email.
-   - **App home page**: a public web page for the app, for example the GitHub repository page `https://github.com/<you>/taskrows`.
-   - **Privacy policy link**: a public page with the app's privacy policy. The repository ships one at `PRIVACY.md`; once the repo is on GitHub, use `https://github.com/<you>/taskrows/blob/develop/PRIVACY.md`. Any domain you own works too, as long as the page is reachable.
-   - If Google asks for **Authorized domains**, add the domain of those two URLs (for GitHub, `github.com`). Save.
+   - **App home page**: `https://tumngobth.github.io/taskrows/` (the repository's GitHub Pages site, served from `docs/`).
+   - **Privacy policy link**: `https://tumngobth.github.io/taskrows/privacy.html`. Do **not** use a `github.com/.../blob/...` link: GitHub answers automated fetches of those pages with HTTP 503, and Google then reports the policy as "unresponsive".
+   - **Authorized domains**: `tumngobth.github.io`. Save.
+   - Google may list **Branding verification issues** afterwards (home page "not registered to you", policy "unresponsive" or "insufficient content"). Verification only removes the *unverified app* warning; it is **not** required for the app to be **In production**. To clear it anyway, verify `https://tumngobth.github.io/taskrows/` in [Google Search Console](https://search.google.com/search-console) as a URL-prefix property using the HTML-file method (commit the file to `docs/`), then retry after 24 hours.
 6. **Publish the app.** Under **Audience** (or **OAuth consent screen**), click **Publish app** and confirm. The status must read **In production**.
    - Why this matters: while the status is **Testing**, Google expires refresh tokens after **7 days**, so you would have to sign in again every week. In production the tokens last until you revoke them.
    - You do not need Google verification for personal use. On first sign-in Google shows an **unverified app** warning. This is expected: click **Advanced → Go to TaskRows (unsafe)**, then allow access.

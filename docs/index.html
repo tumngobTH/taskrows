@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TaskRows</title>
+<meta name="description" content="TaskRows shows your Google Tasks lists in resizable rows on a portrait monitor. Windows desktop app, up to three Google accounts, open source.">
+<style>
+body{font:16px/1.6 system-ui,Segoe UI,sans-serif;max-width:760px;margin:40px auto;padding:0 16px;color:#1b1b1b;background:#fff}
+h1{font-size:2.2em;margin-bottom:.2em}h2{margin-top:2em}.sub{color:#555;font-size:1.1em}
+ul{padding-left:1.2em}footer{margin-top:3em;color:#666;font-size:14px}
+@media (prefers-color-scheme:dark){body{background:#121212;color:#e6e6e6}.sub{color:#aaa}footer{color:#999}}
+</style>
+</head>
+<body>
+<h1>TaskRows</h1>
+<p class="sub">Your Google Tasks lists in rows, built for a tall monitor.</p>
+
+<p>Google's own Tasks interface shows one list at a time, or lists as horizontal columns. Neither fits a portrait screen. TaskRows is a small Windows desktop application that lays your lists out in <strong>rows stacked top to bottom</strong>, with lists side by side inside each row, so every list is visible at once.</p>
+
+<h2>Features</h2>
+<ul>
+<li>Add and remove rows freely; drag the divider to resize them.</li>
+<li>Fixed list width, adjustable in Settings; drag lists between rows and tasks between lists.</li>
+<li>Up to <strong>three Google accounts</strong>, each with its own colour. Lists with the same name across accounts merge into one column.</li>
+<li>Two-way sync with Google Tasks: edits appear on your phone within a minute, and edits from your phone appear in TaskRows.</li>
+<li>Inline editing, notes, due dates, subtasks, completed section, keyboard-friendly.</li>
+<li>Starts from a local cache, so it opens instantly and works offline.</li>
+<li>Lightweight: built with Tauri 2 (Rust) and React; about 80 MB of RAM when idle.</li>
+</ul>
+
+<h2>Privacy</h2>
+<p>TaskRows runs entirely on your computer, with an OAuth client from your own Google Cloud project. It talks only to Google, stores tokens in Windows Credential Manager, and sends nothing anywhere else. Read the full <a href="privacy.html">privacy policy</a>.</p>
+
+<h2>Get it</h2>
+<p>Source code, installer builds and the Google sign-in setup guide are on GitHub: <a href="https://github.com/tumngobTH/taskrows">github.com/tumngobTH/taskrows</a>.</p>
+
+<footer>TaskRows &middot; <a href="privacy.html">Privacy policy</a> &middot; <a href="https://github.com/tumngobTH/taskrows">Source code</a></footer>
+</body>
+</html>
